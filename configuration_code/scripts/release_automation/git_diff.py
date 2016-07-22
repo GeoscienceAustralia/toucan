@@ -60,7 +60,6 @@ parser.add_argument('-b', '--bump', '--ra_bump_level',
                     help='Password to log into https git repo')
 parser.add_argument('-x', '--exclude', '--ra_excluded_diff_files',
                     nargs='*',
-                    default=['.bumpversion.cfg', 'setup.py', 'sonar-project.properties'],
                     help='List of file names to exclude from diff, e.g ".bumpversion.cfg setup.py sonar-project.properties"')
 args = parser.parse_args()
 
@@ -108,11 +107,10 @@ logging.info('Checking out branch: {0}'.format(ra_branch_integration))
 git.checkout(ra_branch_master)
 logging.info('Checking out branch: {0}'.format(ra_branch_master))
 
-###################
-
-logging.info('Excluded Files are {0}'.format(ra_excluded_diff_files))
+# Check Diff
 ra_git_diff = git.diff(''.join([ra_branch_master, '...', ra_branch_integration]), '--name-only')
 ra_split_diff = ra_git_diff.split()
+logging.info('Excluded Files are {0}'.format(ra_excluded_diff_files))
 logging.info('Diff Files are {0}'.format(ra_split_diff))
 logging.info('Generating git diff {0}...{1} --name-only'.format(ra_branch_master, ra_branch_integration))
 

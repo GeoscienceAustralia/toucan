@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 
 """
-Release Automation Script
-This will:
-  Merge integration into master (assuming those are the name of hte two branches you want to use)
-  Bump the version on the integration branch
+Git Diff Script
+Enable git diff comparsions between two branches with a possibility to exclude files via a Python set().
 """
 from git import Repo, GitCommandError
 from bumpversion import main as bump

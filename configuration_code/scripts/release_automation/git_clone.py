@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 
 """
-Release Automation Script
-This will:
-  Merge integration into master (assuming those are the name of hte two branches you want to use)
-  Bump the version on the integration branch
+Git Clone Script
+Clone a git repository using Python + GitPython
 """
 from git import Repo
 import logging
@@ -60,7 +58,7 @@ if ra_git_user:
     ra_clone = Repo.clone_from('https://{0}:{1}@{2}'.format(ra_git_user, ra_git_password, ra_short_git_url),
                                ra_git_repo_name)
 else:
-    ra_clone = Repo.clone_from(ra_short_git_url, ra_git_repo_name)
+    ra_clone = Repo.clone_from(args.url, ra_git_repo_name)
 
 logging.info('Cloning {0} from {1}'.format(ra_git_repo_name, ra_url_dot_git))
 

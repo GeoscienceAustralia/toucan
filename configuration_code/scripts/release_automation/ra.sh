@@ -8,7 +8,7 @@
 
 print_usage() {
    echo "Usage: sh ./ra.sh -u \$user -p \$password -b \$bump -r \$repo"
-   echo "Usage Example: sh ./ra.sh -u my_user -p my_password -b patch -r github.com/organisation/project"
+   echo "Usage: sh ./ra.sh -u my_user -p my_password -b patch -r github.com/organisation/project"
 }
 
 INPUT_ERRORS=0
@@ -50,7 +50,7 @@ fi
 
 if [ -z ${repo} ] ; then
    echo "Error: Git URL has not been set properly"
-   echo "Please use github.com/organisation/project.git"
+   echo "Please use https://github.com/organisation/project.git"
    : $((INPUT_ERRORS+=1))
 fi
 
@@ -78,19 +78,13 @@ git remote add central https://${user}:${password}@${repo} && echo "!! GIT REMOT
 git fetch central && echo "!! GIT FETCH"                                  # Maybe Remove
 git checkout integration && echo "!! GIT CHECKOUT INTEGRATION"
 git checkout master && echo "!! GIT CHECKOUT MASTER"
-diff=$(git diff master...integration)
-echo ${diff}
-if [ -z ${diff} ]; then
-    git merge integration --no-edit && echo "!! GIT MERGE INTEGRATION"
+git merge integration --no-edit && echo "!! GIT MERGE INTEGRATION"
 
-    ## Bump Integration Version
-    git checkout integration && echo "!! GIT CHECKOUT INTEGRATION"
-    #bumpversion patch --list --verbose --dry-run
-    bumpversion ${bump} --list --verbose && echo "!! BUMPVERSION"
+## Bump Integration Version
+git checkout integration && echo "!! GIT CHECKOUT INTEGRATION"
+#bumpversion patch --list --verbose --dry-run
+bumpversion ${bump} --list --verbose && echo "!! BUMPVERSION"
 
-    ## Push Both Commits and Tags
-    git push central --all && echo "!! GIT PUSH --ALL"                      # Push to origin?
-    git push central --tags && echo "!! GIT PUSH --TAGS"                    # Push to origin?
-else
-    echo No Changes, Master and Integration is identical
-fi
+## Push Both Commits and Tags
+git push central --all && echo "!! GIT PUSH --ALL"                      # Push to origin?
+git push central --tags && echo "!! GIT PUSH --TAGS"                    # Push to origin?

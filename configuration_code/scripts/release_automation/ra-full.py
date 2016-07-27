@@ -73,13 +73,16 @@ ra_git_user = args.user
 ra_git_password = args.password
 
 # Clone Repo
-if ra_git_user:
-    ra_clone = Repo.clone_from('https://{0}:{1}@{2}'.format(ra_git_user, ra_git_password, ra_short_git_url),
-                               ra_git_repo_name)
-else:
-    ra_clone = Repo.clone_from(args.url, ra_git_repo_name)
+try:
+    if ra_git_user:
+        ra_clone = Repo.clone_from('https://{0}:{1}@{2}'.format(ra_git_user, ra_git_password, ra_short_git_url),
+                                   ra_git_repo_name)
+    else:
+        ra_clone = Repo.clone_from(args.url, ra_git_repo_name)
+        logging.info('Cloning {0} from {1}'.format(ra_git_repo_name, ra_url_dot_git))
 
-logging.info('Cloning {0} from {1}'.format(ra_git_repo_name, ra_url_dot_git))
+except GitCommandError:
+    logging.info('Repo {0} already exists'.format(ra_git_repo_name))
 
 # Initialise Repo
 repo = Repo(ra_git_repo_name)

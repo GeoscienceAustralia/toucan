@@ -117,8 +117,7 @@ def bumpversion(git, ra_branch_integration, ra_git_repo_name, ra_bump_level):
     logging.info('Changed into folder: {0}'.format(ra_git_repo_name))
 
     bump([ra_bump_level,
-          '--list',
-          '--verbose'])
+          '--list'])
     logging.info('Bumping {0} Version on : {1}'.format(ra_bump_level.upper(), ra_branch_integration))
 
 

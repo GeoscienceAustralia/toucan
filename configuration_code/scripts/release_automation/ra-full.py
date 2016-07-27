@@ -133,7 +133,7 @@ bump([ra_bump_level,
 logging.info('Bumping {0} Version on : {1}'.format(ra_bump_level.upper(), ra_branch_integration))
 
 # Push Both Commits
-git.push()
+git.push('--all')
 logging.info('Pushing {0} and {1} branches'.format(ra_branch_integration, ra_branch_master))
 
 # Push Tags

@@ -15,7 +15,7 @@ import os
 
 # Logging
 logging.basicConfig(
-    level=logging.DEBUG
+    level=logging.INFO
 )
 
 
@@ -51,16 +51,17 @@ def clone_repo(url, ra_git_user, ra_git_password, ra_short_git_url, ra_git_repo_
     """
     try:
         if ra_git_user:
+            logging.debug('Cloning {0} from {1}'.format(ra_git_repo_name, ra_url_dot_git))
             ra_clone = Repo.clone_from('https://{0}:{1}@{2}'.format(ra_git_user, ra_git_password, ra_short_git_url),
                                        ra_git_repo_name)
         else:
+            logging.debug('Cloning {0} from {1}'.format(ra_git_repo_name, ra_url_dot_git))
             ra_clone = Repo.clone_from(url, ra_git_repo_name)
-            logging.info('Cloning {0} from {1}'.format(ra_git_repo_name, ra_url_dot_git))
 
         return ra_clone
 
     except GitCommandError:
-        logging.info('Repo {0} already exists'.format(ra_git_repo_name))
+        logging.warning('Repo {0} already exists'.format(ra_git_repo_name))
 
 
 def git_init(ra_git_repo_name, ra_url_dot_git):
@@ -70,12 +71,12 @@ def git_init(ra_git_repo_name, ra_url_dot_git):
     :param ra_url_dot_git: Full git url with '.git' at the end
     :return: Git Repo object
     """
+    logging.info('Initialise Repo {0} from {1}'.format(ra_git_repo_name, ra_url_dot_git))
     repo = Repo(ra_git_repo_name)
     git = repo.git
-    logging.info('Initialise Repo {0} from {1}'.format(ra_git_repo_name, ra_url_dot_git))
 
+    logging.debug('Fetching Remote'.format())
     git.fetch()
-    logging.info('Fetching Remote'.format())
 
     return git
 
@@ -87,17 +88,17 @@ def merge_2_master(git, ra_branch_integration, ra_branch_master):
     :param ra_branch_integration: Integration Branch to merge changes from
     :param ra_branch_master: Master Branch to merge changes to
     """
+    logging.debug('Checking out branch: {0}'.format(ra_branch_integration))
     git.checkout(ra_branch_integration)
-    logging.info('Checking out branch: {0}'.format(ra_branch_integration))
 
     # Checkout Master
+    logging.debug('Checking out branch: {0}'.format(ra_branch_master))
     git.checkout(ra_branch_master)
-    logging.info('Checking out branch: {0}'.format(ra_branch_master))
 
     # Merge to Master
+    logging.info('Merging {0} into {1}'.format(ra_branch_integration, ra_branch_master))
     git.merge(ra_branch_integration,
               '--no-edit')
-    logging.info('Merging {0} into {1}'.format(ra_branch_integration, ra_branch_master))
 
 
 def bumpversion(git, ra_branch_integration, ra_git_repo_name, ra_bump_level):
@@ -109,16 +110,16 @@ def bumpversion(git, ra_branch_integration, ra_git_repo_name, ra_bump_level):
     :param ra_bump_level: Arguments to pass into bump version such as patch, minor or major
     """
     # Checkout Integration
+    logging.debug('Checking out branch: {0}'.format(ra_branch_integration))
     git.checkout(ra_branch_integration)
-    logging.info('Checking out branch: {0}'.format(ra_branch_integration))
 
     # Bump Integration Version
+    logging.debug('Changed into folder: {0}'.format(ra_git_repo_name))
     os.chdir('/'.join([os.getcwd(), ra_git_repo_name]))
-    logging.info('Changed into folder: {0}'.format(ra_git_repo_name))
 
+    logging.info('Bumping {0} Version on : {1}'.format(ra_bump_level.upper(), ra_branch_integration))
     bump([ra_bump_level,
           '--list'])
-    logging.info('Bumping {0} Version on : {1}'.format(ra_bump_level.upper(), ra_branch_integration))
 
 
 def push_commits_and_tags(git, ra_branch_integration, ra_branch_master):
@@ -129,12 +130,12 @@ def push_commits_and_tags(git, ra_branch_integration, ra_branch_master):
     :param ra_branch_master: Master Branch to merge changes to
     """
     # Push Both Commits
-    git.push('--all')
     logging.info('Pushing {0} and {1} branches'.format(ra_branch_integration, ra_branch_master))
+    git.push('--all')
 
     # Push Tags
-    git.push('--tags')
     logging.info('Pushing new tags')
+    git.push('--tags')
 
 
 def main():
@@ -174,6 +175,7 @@ def main():
     git_password = args.password
 
     # Release Automation Stages
+    logging.info('Starting Release Automation')
     clone_repo(url, git_user, git_password, short_git_url, git_repo_name, url_dot_git)
     git = git_init(git_repo_name, url_dot_git)
     merge_2_master(git, branch_integration, branch_master)

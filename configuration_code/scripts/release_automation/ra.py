@@ -97,7 +97,7 @@ def check_diff(git, ra_branch_integration, ra_branch_master, ra_excluded_diff_fi
 
     if set(ra_split_diff) == set(ra_excluded_diff_files):
         logging.debug('RA check_diff: Git diff results: only excluded files {0}'.format(ra_excluded_diff_files))
-        exit('EXIT: Git diff between {0} and {1} found no changes to action'.format(ra_branch_master, ra_branch_integration))
+        logging.debug('EXIT: Git diff between {0} and {1} found no changes to action'.format(ra_branch_master, ra_branch_integration))
     else:
         logging.debug('RA check_diff: Git diff results: Diff Files are {0}'.format(ra_split_diff))
 

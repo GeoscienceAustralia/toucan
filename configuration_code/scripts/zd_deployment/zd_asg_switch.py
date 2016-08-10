@@ -3,17 +3,30 @@ import sys
 
 import boto3
 
+# AWS autoscaling group type name
 ASG_TYPE = 'AWS::AutoScaling::AutoScalingGroup'
+# AWS elastic load balancer type name
 ELB_TYPE = 'AWS::ElasticLoadBalancing::LoadBalancer'
+# List of stable/good cloudformation resource states
 GOOD_STATES = ['CREATE_COMPLETE', 'UPDATE_COMPLETE']
 
 
 class StackSwitchError(Exception):
+    """
+    If there is an error or inconsistent state encountered during stack switch
+    """
+
     def __init__(self, value):
         self.value = value
 
 
 def stack_switch(cf_stack_name, logical_stack_name, unit_name):
+    """
+    Switch an Amazonia zd autoscaling unit in a given Amazonia stack
+    :param cf_stack_name: Cloudformation stack name
+    :param logical_stack_name: Amazonia stack name
+    :param unit_name: Amazonia unit name
+    """
     cloudformation_client = boto3.client('cloudformation')
 
     response = cloudformation_client.list_stack_resources(
@@ -106,6 +119,7 @@ def stack_switch(cf_stack_name, logical_stack_name, unit_name):
 def get_args(argv):
     """
     Handles all the arguments that are passed into the script
+    :param argv: command line arguments
     :return: Returns a parsed version of the arguments.
     """
     parser = argparse.ArgumentParser(
@@ -130,7 +144,7 @@ def main(argv):
     This script is oddly specific to aremi and will be changed in the future,
     it takes the supplied arguments and substitutes the aremi release placeholder with a specific
     aremi release version name
-    :param argv:
+    :param argv: command line arguments
     """
     args = get_args(argv)
     stack_switch(cf_stack_name=args.cf_stack_name, logical_stack_name=args.logical_stack_name, unit_name=args.unit_name)

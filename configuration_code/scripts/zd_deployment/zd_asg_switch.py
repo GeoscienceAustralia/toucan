@@ -32,14 +32,7 @@ def lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, object_type
     """
     cloudformation_client = boto3.client('cloudformation')
 
-    data = {
-        'logical_stack_name': logical_stack_name,
-        'unit_name': unit_name,
-        'object_type': object_type,
-        'object_name': object_name
-    }
-
-    logical_resource_name = '{object_name}{logical_stack_name}{unit_name}{object_type}'.format(**data)
+    logical_resource_name = object_name+logical_stack_name+unit_name+object_type
 
     response = cloudformation_client.describe_stack_resource(
         StackName=cf_stack_name,

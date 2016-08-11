@@ -101,7 +101,7 @@ def stack_switch(cf_stack_name, logical_stack_name, unit_name, profile):
     if profile is not None:
         session = boto3.session.Session(profile_name=profile)
     else:
-        session = boto3.session.Session(profile_name=profile)
+        session = boto3.session.Session()
 
     asg_client = session.client('autoscaling')
 

@@ -3,10 +3,10 @@ import sys
 
 import boto3
 
-# AWS autoscaling group type name
-ASG_TYPE = 'AWS::AutoScaling::AutoScalingGroup'
-# AWS elastic load balancer type name
-ELB_TYPE = 'AWS::ElasticLoadBalancing::LoadBalancer'
+# Valid cloud formation resource mappings
+RESOURCE_TYPES = {'Asg': 'AWS::AutoScaling::AutoScalingGroup',
+                  'Elb': 'AWS::ElasticLoadBalancing::LoadBalancer'}
+
 # List of stable/good cloudformation resource states
 GOOD_STATES = ['CREATE_COMPLETE', 'UPDATE_COMPLETE']
 
@@ -20,75 +20,58 @@ class StackSwitchError(Exception):
         self.value = value
 
 
-def stack_switch(cf_stack_name, logical_stack_name, unit_name):
+def lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, object_type, object_name):
     """
-    Switch an Amazonia zd autoscaling unit in a given Amazonia stack
-    :param cf_stack_name: Cloudformation stack name
+    Return the AWS identifier for a cloud formation resource
+    :param cf_stack_name: Cloudfromation stack name
     :param logical_stack_name: Amazonia stack name
     :param unit_name: Amazonia unit name
+    :param object_type: 'Asg' or 'Elb'
+    :param object_name: 'blue' or 'green' for ASGs, 'active' and 'inactive' for ELBs
+    :return: AWS identifier of specified resource
     """
     cloudformation_client = boto3.client('cloudformation')
 
-    response = cloudformation_client.list_stack_resources(
-        StackName=cf_stack_name
+    logical_resource_name = object_name+logical_stack_name+unit_name+object_type
+
+    response = cloudformation_client.describe_stack_resource(
+        StackName=cf_stack_name,
+        LogicalResourceId=logical_resource_name
     )
-    resources = response['StackResourceSummaries']
-    next_token = None
-    if 'NextToken' in response:
-        next_token = response['NextToken']
 
-    # just in case the stack gets particularly large
-    while next_token is not None:
-        response = cloudformation_client.list_stack_resources(
-            StackName=cf_stack_name,
-            NextToken=next_token
-        )
-        resources.extend(response['StackResourceSummaries'])
-        if 'NextToken' in response:
-            next_token = response['NextToken']
-        else:
-            next_token = None
+    resource = response['StackResourceDetail']
 
-    data = {
-        'logical_stack_name': logical_stack_name,
-        'unit_name': unit_name
-    }
+    if resource['ResourceType'] != RESOURCE_TYPES[object_type]:
+        raise StackSwitchError('Error: {0} had type of {1}, was expecting {2}'.format(logical_resource_name,
+                                                                                      resource['ResourceType'],
+                                                                                      RESOURCE_TYPES[object_type]))
+    if resource['ResourceStatus'] not in GOOD_STATES:
+        raise StackSwitchError(
+            'Error: {0} had status {1}'.format(logical_resource_name, resource['ResourceStatus']))
 
-    blue_asg_id = None
-    green_asg_id = None
-    active_elb_id = None
-    inactive_elb_id = None
-    blue_asg_name = '{asg_colour}{logical_stack_name}{unit_name}Asg'.format(asg_colour='blue', **data)
-    green_asg_name = '{asg_colour}{logical_stack_name}{unit_name}Asg'.format(asg_colour='green', **data)
-    active_elb_name = '{elb_state}{logical_stack_name}{unit_name}Elb'.format(elb_state='active', **data)
-    inactive_elb_name = '{elb_state}{logical_stack_name}{unit_name}Elb'.format(elb_state='inactive', **data)
+    return resource['PhysicalResourceId']
 
-    for resource in resources:  # type: dict
-        if resource['LogicalResourceId'] == blue_asg_name and resource['ResourceType'] == ASG_TYPE:
-            if resource['ResourceStatus'] in GOOD_STATES:
-                blue_asg_id = resource['PhysicalResourceId']
-            else:
-                raise StackSwitchError('Error: {0} had status {1}'.format(blue_asg_name, resource['ResourceStatus']))
-        elif resource['LogicalResourceId'] == green_asg_name and resource['ResourceType'] == ASG_TYPE:
-            if resource['ResourceStatus'] in GOOD_STATES:
-                green_asg_id = resource['PhysicalResourceId']
-            else:
-                raise StackSwitchError('Error: {0} had status {1}'.format(green_asg_name, resource['ResourceStatus']))
-        elif resource['LogicalResourceId'] == active_elb_name and resource['ResourceType'] == ELB_TYPE:
-            if resource['ResourceStatus'] in GOOD_STATES:
-                active_elb_id = resource['PhysicalResourceId']
-            else:
-                raise StackSwitchError('Error: {0} had status {1}'.format(active_elb_name, resource['ResourceStatus']))
-        elif resource['LogicalResourceId'] == inactive_elb_name and resource['ResourceType'] == ELB_TYPE:
-            if resource['ResourceStatus'] in GOOD_STATES:
-                inactive_elb_id = resource['PhysicalResourceId']
-            else:
-                raise StackSwitchError(
-                    'Error: {0} had status {1}'.format(inactive_elb_name, resource['ResourceStatus']))
 
-    status = None
+def check_response(http_response):
+    """
+    Check http response code for stack switch operation, raise error if not 200
+    :param http_response: Boto3 http response
+    """
+    http_response = http_response['ResponseMetadata']['HTTPStatusCode']
+    if http_response != 200:
+        raise StackSwitchError('Error: received the following non-success HTTP status code: {0}'.format(http_response))
 
-    asg_client = boto3.client('autoscaling')
+
+def check_state(asg_client, blue_asg_id, active_elb_id, inactive_elb_id):
+    """
+    Check which ELB is attached to the blue ASG, raise error if sate is unrecognized
+    :param asg_client: Boto3 autoscaling client
+    :param blue_asg_id: AWS resource ID for blue asg
+    :param active_elb_id: AWS resource ID for active elb
+    :param inactive_elb_id: AWS resource ID for inactive elb
+    :return: state of zd unit
+    """
+    state = None
 
     response = asg_client.describe_auto_scaling_groups(
         AutoScalingGroupNames=[blue_asg_id]
@@ -97,23 +80,54 @@ def stack_switch(cf_stack_name, logical_stack_name, unit_name):
     for autoscaling_group in response['AutoScalingGroups']:
         for loadbalancer_name in autoscaling_group['LoadBalancerNames']:
             if loadbalancer_name == active_elb_id:
-                status = 'blue'
+                state = 'blue'
             elif loadbalancer_name == inactive_elb_id:
-                status = 'green'
+                state = 'green'
             else:
-                raise StackSwitchError('Could not identify state of unit, blue asg loadbalancer id was {0}'
-                                       .format(loadbalancer_name))
-    print('Detected {0} in {1} state, switching...'.format(unit_name, status))
-    if status == 'blue':
-        print(asg_client.attach_load_balancers(AutoScalingGroupName=blue_asg_id, LoadBalancerNames=[inactive_elb_id]))
-        print(asg_client.attach_load_balancers(AutoScalingGroupName=green_asg_id, LoadBalancerNames=[active_elb_id]))
-        print(asg_client.detach_load_balancers(AutoScalingGroupName=blue_asg_id, LoadBalancerNames=[active_elb_id]))
-        print(asg_client.detach_load_balancers(AutoScalingGroupName=green_asg_id, LoadBalancerNames=[inactive_elb_id]))
-    elif status == 'green':
-        print(asg_client.attach_load_balancers(AutoScalingGroupName=blue_asg_id, LoadBalancerNames=[active_elb_id]))
-        print(asg_client.attach_load_balancers(AutoScalingGroupName=green_asg_id, LoadBalancerNames=[inactive_elb_id]))
-        print(asg_client.detach_load_balancers(AutoScalingGroupName=blue_asg_id, LoadBalancerNames=[inactive_elb_id]))
-        print(asg_client.detach_load_balancers(AutoScalingGroupName=green_asg_id, LoadBalancerNames=[active_elb_id]))
+                raise StackSwitchError('Could not identify state of unit, {0} loadbalancer id was {0}'
+                                       .format(blue_asg_id, loadbalancer_name))
+    return state
+
+
+def stack_switch(cf_stack_name, logical_stack_name, unit_name):
+    """
+    Switch an Amazonia zd autoscaling unit in a given Amazonia stack
+    :param cf_stack_name: Cloudformation stack name
+    :param logical_stack_name: Amazonia stack name
+    :param unit_name: Amazonia unit name
+    """
+    asg_client = boto3.client('autoscaling')
+
+    blue_asg_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Asg', 'blue')
+    green_asg_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Asg', 'green')
+    active_elb_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Elb', 'active')
+    inactive_elb_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Elb', 'inactive')
+
+    state = check_state(asg_client, blue_asg_id, active_elb_id, inactive_elb_id)
+    print('Detected {0} in {1} state, switching...'.format(unit_name, state))
+    if state == 'blue':
+        check_response(
+            asg_client.attach_load_balancers(AutoScalingGroupName=blue_asg_id, LoadBalancerNames=[inactive_elb_id]))
+        check_response(
+            asg_client.attach_load_balancers(AutoScalingGroupName=green_asg_id, LoadBalancerNames=[active_elb_id]))
+        check_response(
+            asg_client.detach_load_balancers(AutoScalingGroupName=blue_asg_id, LoadBalancerNames=[active_elb_id]))
+        check_response(
+            asg_client.detach_load_balancers(AutoScalingGroupName=green_asg_id, LoadBalancerNames=[inactive_elb_id]))
+    elif state == 'green':
+        check_response(
+            asg_client.attach_load_balancers(AutoScalingGroupName=blue_asg_id, LoadBalancerNames=[active_elb_id]))
+        check_response(
+            asg_client.attach_load_balancers(AutoScalingGroupName=green_asg_id, LoadBalancerNames=[inactive_elb_id]))
+        check_response(
+            asg_client.detach_load_balancers(AutoScalingGroupName=blue_asg_id, LoadBalancerNames=[inactive_elb_id]))
+        check_response(
+            asg_client.detach_load_balancers(AutoScalingGroupName=green_asg_id, LoadBalancerNames=[active_elb_id]))
+
+    new_state = check_state(asg_client, blue_asg_id, active_elb_id, inactive_elb_id)
+    if new_state == state:
+        raise StackSwitchError('Error: stack switching failed, still in {0} state'.format(state))
+    print('Old state of {0} was {1}, new state is {2}'.format(unit_name, state, new_state))
 
 
 def get_args(argv):

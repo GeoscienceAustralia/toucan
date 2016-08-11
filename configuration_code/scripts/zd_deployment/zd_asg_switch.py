@@ -96,6 +96,7 @@ def stack_switch(cf_stack_name, logical_stack_name, unit_name, profile):
     :param cf_stack_name: Cloudformation stack name
     :param logical_stack_name: Amazonia stack name
     :param unit_name: Amazonia unit name
+    :param profile: AWS profile name to use
     """
 
     if profile is not None:

@@ -159,7 +159,7 @@ def get_args(argv):
                         dest="unit_name",
                         required=True)
     parser.add_argument("-P", "-p", "--profile",
-                        help="The name of the unit to switch",
+                        help="The name of the AWS profile",
                         dest="profile",
                         required=False)
     return parser.parse_args(argv)

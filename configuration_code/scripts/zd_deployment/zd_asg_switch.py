@@ -20,7 +20,7 @@ class StackSwitchError(Exception):
         self.value = value
 
 
-def lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, object_type, object_name):
+def lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, object_type, object_name, session):
     """
     Return the AWS identifier for a cloud formation resource
     :param cf_stack_name: Cloudfromation stack name
@@ -28,11 +28,12 @@ def lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, object_type
     :param unit_name: Amazonia unit name
     :param object_type: 'Asg' or 'Elb'
     :param object_name: 'blue' or 'green' for ASGs, 'active' and 'inactive' for ELBs
+    :param session: boto3 session object
     :return: AWS identifier of specified resource
     """
-    cloudformation_client = boto3.client('cloudformation')
+    cloudformation_client = session.client('cloudformation')
 
-    logical_resource_name = object_name+logical_stack_name+unit_name+object_type
+    logical_resource_name = object_name + logical_stack_name + unit_name + object_type
 
     response = cloudformation_client.describe_stack_resource(
         StackName=cf_stack_name,
@@ -89,19 +90,26 @@ def check_state(asg_client, blue_asg_id, active_elb_id, inactive_elb_id):
     return state
 
 
-def stack_switch(cf_stack_name, logical_stack_name, unit_name):
+def stack_switch(cf_stack_name, logical_stack_name, unit_name, profile):
     """
     Switch an Amazonia zd autoscaling unit in a given Amazonia stack
     :param cf_stack_name: Cloudformation stack name
     :param logical_stack_name: Amazonia stack name
     :param unit_name: Amazonia unit name
+    :param profile: AWS profile name to use
     """
-    asg_client = boto3.client('autoscaling')
 
-    blue_asg_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Asg', 'blue')
-    green_asg_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Asg', 'green')
-    active_elb_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Elb', 'active')
-    inactive_elb_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Elb', 'inactive')
+    if profile is not None:
+        session = boto3.session.Session(profile_name=profile)
+    else:
+        session = boto3.session.Session()
+
+    asg_client = session.client('autoscaling')
+
+    blue_asg_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Asg', 'blue', session)
+    green_asg_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Asg', 'green', session)
+    active_elb_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Elb', 'prod', session)
+    inactive_elb_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Elb', 'pre', session)
 
     state = check_state(asg_client, blue_asg_id, active_elb_id, inactive_elb_id)
     print('Detected {0} in {1} state, switching...'.format(unit_name, state))
@@ -150,6 +158,10 @@ def get_args(argv):
                         help="The name of the unit to switch",
                         dest="unit_name",
                         required=True)
+    parser.add_argument("-P", "-p", "--profile",
+                        help="The name of the AWS profile",
+                        dest="profile",
+                        required=False)
     return parser.parse_args(argv)
 
 
@@ -161,7 +173,8 @@ def main(argv):
     :param argv: command line arguments
     """
     args = get_args(argv)
-    stack_switch(cf_stack_name=args.cf_stack_name, logical_stack_name=args.logical_stack_name, unit_name=args.unit_name)
+    stack_switch(cf_stack_name=args.cf_stack_name, logical_stack_name=args.logical_stack_name, unit_name=args.unit_name,
+                 profile=args.profile)
 
 
 if __name__ == "__main__":

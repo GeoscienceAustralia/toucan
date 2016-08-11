@@ -107,8 +107,8 @@ def stack_switch(cf_stack_name, logical_stack_name, unit_name, profile):
 
     blue_asg_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Asg', 'blue', session)
     green_asg_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Asg', 'green', session)
-    active_elb_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Elb', 'active', session)
-    inactive_elb_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Elb', 'inactive', session)
+    active_elb_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Elb', 'prod', session)
+    inactive_elb_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Elb', 'pre', session)
 
     state = check_state(asg_client, blue_asg_id, active_elb_id, inactive_elb_id)
     print('Detected {0} in {1} state, switching...'.format(unit_name, state))

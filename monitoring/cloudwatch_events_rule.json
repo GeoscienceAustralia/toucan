@@ -1,0 +1,16 @@
+{  
+   "metrics":[  
+      "CPUUtilization",
+      "DiskSpaceUtilization",
+      "MemoryUtilization",
+      "StatusCheckFailed",
+      "NetworkIn",
+      "NetworkOut",
+      "DiskReadBytes",
+      "DiskWriteBytes"
+   ],
+   "aggtime":5,
+   "endpoint":"[endpoint]",
+   "measurement":"Average",
+   "region":"[region]"
+}

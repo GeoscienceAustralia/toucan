@@ -123,6 +123,26 @@ def merge_2_master(git, ra_branch_integration, ra_branch_master):
               '--no-edit')
 
 
+def create_git_tag_on_master(git, ra_branch_master):
+    # Checkout Master
+    logging.debug('RA create_git_tag_on_master: Checking out branch: {0}'.format(ra_branch_master))
+    git.checkout(ra_branch_master)
+
+    # Get Tag Version from .bumpversion.cfg
+    logging.debug('RA create_git_tag_on_master: Opening file .bumpversion.cfg to obtain current version')
+    with open('.bumpversion.cfg') as file:
+        for line in file.readlines():
+            if 'current_version' in line:
+                current_version = re.search(r'current_version = \s*([\d.]+)', line).group(1)
+                tag = 'v' + current_version
+                # Create git tag
+                logging.debug('RA create_git_tag_on_master: Creating git tag: {0}'.format(tag))
+                git.tag('-a',
+                        tag,
+                        '-m',
+                        'Bump Version -->' + tag)
+
+
 def bumpversion(git, ra_branch_integration, ra_git_repo_name, ra_bump_level):
     """
 

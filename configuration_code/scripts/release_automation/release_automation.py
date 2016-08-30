@@ -161,7 +161,7 @@ def create_git_tag_on_master(git, ra_branch_master, ra_git_repo_name, ra_build_d
                     git.tag('-a',
                             tag,
                             '-m',
-                            'Bump Version --> ' + tag)
+                            'Amazonia Version --> ' + tag)
                 except GitCommandError:
                     logging.error('RA create_git_tag_on_master: Tag {0} already exists'.format(tag))
 

@@ -270,7 +270,6 @@ def main():
         create_git_tag_on_master(git, branch_master, git_repo_name, build_dir)
         bumpversion(git, branch_integration, git_repo_name, bump_level, build_dir)
         push_commits_and_tags(git, branch_integration, branch_master)
-    elif ra_action not in ['diff']:
-        logging.error('RA: Release Automation Action not supported: {0}'.format(ra_action))
+
 if __name__ == '__main__':
     main()

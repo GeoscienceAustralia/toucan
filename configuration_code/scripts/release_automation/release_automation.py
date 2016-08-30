@@ -14,9 +14,9 @@ import re
 import os
 
 
-def url_maniupation(url):
+def url_manipulation(url):
     """
-    # Manipulate ra_git_repo_url string to drop https and add .git if required
+    Manipulate ra_git_repo_url string to drop https and add .git if required
     :param url: Git Repository for getting branches e.g. https://github.com/GeoscienceAustralia/amazonia.git
     :return: Tuple of url without https://, name of application from git repo, full url with '.git' at the end
     """
@@ -82,6 +82,13 @@ def git_init(ra_git_repo_name, ra_url_dot_git):
 
 
 def check_diff(git, ra_branch_integration, ra_branch_master, ra_excluded_diff_files):
+    """
+    Checks diffs between master and intergration exlcuding files we expect to be changed from bumpversion
+    :param git: Name of application from git repository
+    :param ra_branch_integration: Integration Branch to check changes from
+    :param ra_branch_master: Master Branch to check changes to
+    :param ra_excluded_diff_files: List of excluded files we already expect changes to be in
+    """
     # Checkout Integration
     logging.debug('RA merge_2_master: Checking out branch: {0}'.format(ra_branch_integration))
     git.checkout(ra_branch_integration)
@@ -93,11 +100,13 @@ def check_diff(git, ra_branch_integration, ra_branch_master, ra_excluded_diff_fi
     # Check Diff
     ra_git_diff = git.diff(''.join([ra_branch_master, '...', ra_branch_integration]), '--name-only')
     ra_split_diff = ra_git_diff.split()
-    logging.debug('RA check_diff: Generating git diff {0}...{1} --name-only'.format(ra_branch_master, ra_branch_integration))
+    logging.debug('RA check_diff: Generating git diff {0}...{1} --name-only'.format(ra_branch_master,
+                                                                                    ra_branch_integration))
 
     if set(ra_split_diff) == set(ra_excluded_diff_files):
         logging.debug('RA check_diff: Git diff results: only excluded files {0}'.format(ra_excluded_diff_files))
-        logging.debug('EXIT: Git diff between {0} and {1} found no changes to action'.format(ra_branch_master, ra_branch_integration))
+        logging.debug('EXIT: Git diff between {0} and {1} found no changes to action'.format(ra_branch_master,
+                                                                                             ra_branch_integration))
     else:
         logging.debug('RA check_diff: Git diff results: Diff Files are {0}'.format(ra_split_diff))
 
@@ -123,22 +132,58 @@ def merge_2_master(git, ra_branch_integration, ra_branch_master):
               '--no-edit')
 
 
-def bumpversion(git, ra_branch_integration, ra_git_repo_name, ra_bump_level):
+def create_git_tag_on_master(git, ra_branch_master, ra_git_repo_name, ra_build_dir):
     """
+    Creates Git tag on master
+    :param git: Git Repo Clone object
+    :param ra_branch_master: Master branch to create tag from
+    :param ra_git_repo_name: Name of application from git repository
+    :param ra_build_dir: Build directory preceding git dir
+    """
+    # Checkout Master
+    logging.debug('RA create_git_tag_on_master: Checking out branch: {0}'.format(ra_branch_master))
+    git.checkout(ra_branch_master)
 
+    # Change Dir to Repo
+    os.chdir('/'.join([ra_build_dir, ra_git_repo_name]))
+
+    # Get Tag Version from .bumpversion.cfg
+    logging.debug('RA create_git_tag_on_master: Opening file .bumpversion.cfg to obtain current version')
+    with open('.bumpversion.cfg') as file:
+        for line in file.readlines():
+            if 'current_version' in line:
+                current_version = re.search(r'current_version = \s*([\d.]+)', line).group(1)
+                tag = 'v' + current_version
+
+                # Create git tag
+                try:
+                    logging.info('RA create_git_tag_on_master: Creating git tag from master: {0}'.format(tag))
+                    git.tag('-a',
+                            tag,
+                            '-m',
+                            'Amazonia Version --> ' + tag)
+                except GitCommandError:
+                    logging.error('RA create_git_tag_on_master: Tag {0} already exists'.format(tag))
+
+
+def bumpversion(git, ra_branch_integration, ra_git_repo_name, ra_bump_level, ra_build_dir):
+    """
+    Bumps the version on intergration
     :param git: Git Repo Clone object
     :param ra_branch_integration: Integration Branch to merge changes from
     :param ra_git_repo_name: Name of application from git repository
     :param ra_bump_level: Arguments to pass into bump version such as patch, minor or major
+    :param ra_build_dir: Build directory preceding git dir
     """
     # Checkout Integration
     logging.debug('RA bumpversion: Checking out branch: {0}'.format(ra_branch_integration))
     git.checkout(ra_branch_integration)
 
-    # Bump Integration Version
+    # Change Dir to Repo
     logging.debug('RA bumpversion: Changed into folder: {0}'.format(ra_git_repo_name))
-    os.chdir('/'.join([os.getcwd(), ra_git_repo_name]))
+    os.chdir('/'.join([ra_build_dir, ra_git_repo_name]))
 
+    # Bump Integration Version
     logging.info('RA bumpversion: Bumping {0} Version on : {1}'.format(ra_bump_level.upper(), ra_branch_integration))
     bump([ra_bump_level,
           '--list'])
@@ -196,7 +241,7 @@ def main():
 
     # Variables
     url = args.url
-    git_repo_tuple = url_maniupation(args.url)
+    git_repo_tuple = url_manipulation(args.url)
     url_dot_git = git_repo_tuple[2]
     git_repo_name = git_repo_tuple[1]
     short_git_url = git_repo_tuple[0]
@@ -206,6 +251,7 @@ def main():
     git_user = args.user
     git_password = args.password
     excluded_diff_files = args.exclude
+    build_dir = os.getcwd()
 
     # Release Automation Stages
     logging.info('RA: Starting Release Automation')
@@ -213,7 +259,8 @@ def main():
     git = git_init(git_repo_name, url_dot_git)
     check_diff(git, branch_integration, branch_master, excluded_diff_files)
     merge_2_master(git, branch_integration, branch_master)
-    bumpversion(git, branch_integration, git_repo_name, bump_level)
+    create_git_tag_on_master(git, branch_master, git_repo_name, build_dir)
+    bumpversion(git, branch_integration, git_repo_name, bump_level, build_dir)
     push_commits_and_tags(git, branch_integration, branch_master)
 
 if __name__ == '__main__':

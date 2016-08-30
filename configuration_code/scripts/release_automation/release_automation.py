@@ -232,12 +232,17 @@ def main():
     parser.add_argument('-b', '--bump', '--ra_bump_level',
                         default='patch',
                         help="Level of bump, e.g. 'patch', 'minor', 'major'")
+    parser.add_argument('-a', '--action',
+                        default='release',
+                        help="type of action: "
+                             "'release' = run all steps, "
+                             "'diff' = only run git diff")
     parser.add_argument('-x', '--exclude', '--ra_excluded_diff_files',
                         nargs='*',
                         help='List of file names to exclude from diff, '
                              'e.g ".bumpversion.cfg setup.py sonar-project.properties"')
     args = parser.parse_args()
-    logging.debug('args = {0}'.format(args))
+    logging.debug('RA: args = {0}'.format(args))
 
     # Variables
     url = args.url
@@ -252,16 +257,20 @@ def main():
     git_password = args.password
     excluded_diff_files = args.exclude
     build_dir = os.getcwd()
+    ra_action = args.action
 
     # Release Automation Stages
-    logging.info('RA: Starting Release Automation')
+    logging.info('RA: Starting Release Automation Action: {0}'.format(ra_action))
     clone_repo(url, git_user, git_password, short_git_url, git_repo_name, url_dot_git)
     git = git_init(git_repo_name, url_dot_git)
-    check_diff(git, branch_integration, branch_master, excluded_diff_files)
-    merge_2_master(git, branch_integration, branch_master)
-    create_git_tag_on_master(git, branch_master, git_repo_name, build_dir)
-    bumpversion(git, branch_integration, git_repo_name, bump_level, build_dir)
-    push_commits_and_tags(git, branch_integration, branch_master)
-
+    if ra_action in ['diff', 'release']:
+        check_diff(git, branch_integration, branch_master, excluded_diff_files)
+    if ra_action in ['release']:
+        merge_2_master(git, branch_integration, branch_master)
+        create_git_tag_on_master(git, branch_master, git_repo_name, build_dir)
+        bumpversion(git, branch_integration, git_repo_name, bump_level, build_dir)
+        push_commits_and_tags(git, branch_integration, branch_master)
+    else:
+        logging.error('RA: Release Automation Action not supported: {0}'.format(ra_action))
 if __name__ == '__main__':
     main()

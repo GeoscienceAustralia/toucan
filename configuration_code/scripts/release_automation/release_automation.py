@@ -154,9 +154,10 @@ def create_git_tag_on_master(git, ra_branch_master, ra_git_repo_name, ra_build_d
             if 'current_version' in line:
                 current_version = re.search(r'current_version = \s*([\d.]+)', line).group(1)
                 tag = 'v' + current_version
+
                 # Create git tag
-                logging.debug('RA create_git_tag_on_master: Creating git tag: {0}'.format(tag))
                 try:
+                    logging.info('RA create_git_tag_on_master: Creating git tag: {0}'.format(tag))
                     git.tag('-a',
                             tag,
                             '-m',

@@ -142,10 +142,13 @@ def create_git_tag_on_master(git, ra_branch_master, ra_git_repo_name):
                 tag = 'v' + current_version
                 # Create git tag
                 logging.debug('RA create_git_tag_on_master: Creating git tag: {0}'.format(tag))
-                git.tag('-a',
-                        tag,
-                        '-m',
-                        'Bump Version --> ' + tag)
+                try:
+                    git.tag('-a',
+                            tag,
+                            '-m',
+                            'Bump Version --> ' + tag)
+                except GitCommandError:
+                    logging.error('RA create_git_tag_on_master: Tag {0} already exists'.format(tag))
 
 
 def bumpversion(git, ra_branch_integration, ra_git_repo_name, ra_bump_level):

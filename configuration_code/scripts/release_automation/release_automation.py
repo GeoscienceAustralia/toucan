@@ -109,7 +109,7 @@ def check_diff(git, ra_branch_integration, ra_branch_master, ra_excluded_diff_fi
                                                                                              ra_branch_integration))
         exit(0)
     else:
-        logging.debug('RA check_diff: Git diff results: Diff Files are {0}'.format(ra_split_diff))
+        logging.info('RA check_diff: Git diff results: Diff Files are {0}'.format(ra_split_diff))
 
 
 def merge_2_master(git, ra_branch_integration, ra_branch_master):

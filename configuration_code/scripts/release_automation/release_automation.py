@@ -157,7 +157,7 @@ def create_git_tag_on_master(git, ra_branch_master, ra_git_repo_name, ra_build_d
 
                 # Create git tag
                 try:
-                    logging.info('RA create_git_tag_on_master: Creating git tag: {0}'.format(tag))
+                    logging.info('RA create_git_tag_on_master: Creating git tag from master: {0}'.format(tag))
                     git.tag('-a',
                             tag,
                             '-m',

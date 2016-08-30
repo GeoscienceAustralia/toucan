@@ -104,11 +104,12 @@ def check_diff(git, ra_branch_integration, ra_branch_master, ra_excluded_diff_fi
                                                                                     ra_branch_integration))
 
     if set(ra_split_diff) == set(ra_excluded_diff_files):
-        logging.debug('RA check_diff: Git diff results: only excluded files {0}'.format(ra_excluded_diff_files))
-        logging.debug('EXIT: Git diff between {0} and {1} found no changes to action'.format(ra_branch_master,
+        logging.info('RA check_diff: Git diff results: only excluded files {0}'.format(ra_excluded_diff_files))
+        logging.info('EXIT: Git diff between {0} and {1} found no changes to action'.format(ra_branch_master,
                                                                                              ra_branch_integration))
+        exit(0)
     else:
-        logging.debug('RA check_diff: Git diff results: Diff Files are {0}'.format(ra_split_diff))
+        logging.info('RA check_diff: Git diff results: Diff Files are {0}'.format(ra_split_diff))
 
 
 def merge_2_master(git, ra_branch_integration, ra_branch_master):
@@ -232,12 +233,17 @@ def main():
     parser.add_argument('-b', '--bump', '--ra_bump_level',
                         default='patch',
                         help="Level of bump, e.g. 'patch', 'minor', 'major'")
+    parser.add_argument('-a', '--action',
+                        default='release',
+                        help="type of action: "
+                             "'release' = run all stages, "
+                             "'diff' = only run git diff")
     parser.add_argument('-x', '--exclude', '--ra_excluded_diff_files',
                         nargs='*',
                         help='List of file names to exclude from diff, '
                              'e.g ".bumpversion.cfg setup.py sonar-project.properties"')
     args = parser.parse_args()
-    logging.debug('args = {0}'.format(args))
+    logging.debug('RA: args = {0}'.format(args))
 
     # Variables
     url = args.url
@@ -252,16 +258,18 @@ def main():
     git_password = args.password
     excluded_diff_files = args.exclude
     build_dir = os.getcwd()
+    ra_action = args.action
 
     # Release Automation Stages
-    logging.info('RA: Starting Release Automation')
+    logging.info('RA: Starting Release Automation Action: {0}'.format(ra_action))
     clone_repo(url, git_user, git_password, short_git_url, git_repo_name, url_dot_git)
     git = git_init(git_repo_name, url_dot_git)
     check_diff(git, branch_integration, branch_master, excluded_diff_files)
-    merge_2_master(git, branch_integration, branch_master)
-    create_git_tag_on_master(git, branch_master, git_repo_name, build_dir)
-    bumpversion(git, branch_integration, git_repo_name, bump_level, build_dir)
-    push_commits_and_tags(git, branch_integration, branch_master)
+    if ra_action in ['release']:
+        merge_2_master(git, branch_integration, branch_master)
+        create_git_tag_on_master(git, branch_master, git_repo_name, build_dir)
+        bumpversion(git, branch_integration, git_repo_name, bump_level, build_dir)
+        push_commits_and_tags(git, branch_integration, branch_master)
 
 if __name__ == '__main__':
     main()

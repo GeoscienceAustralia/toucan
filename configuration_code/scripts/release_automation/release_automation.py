@@ -125,10 +125,13 @@ def merge_2_master(git, ra_branch_integration, ra_branch_master):
               '--no-edit')
 
 
-def create_git_tag_on_master(git, ra_branch_master):
+def create_git_tag_on_master(git, ra_branch_master, ra_git_repo_name):
     # Checkout Master
     logging.debug('RA create_git_tag_on_master: Checking out branch: {0}'.format(ra_branch_master))
     git.checkout(ra_branch_master)
+
+    # Change Dir to Repo
+    os.chdir('/'.join([os.getcwd(), ra_git_repo_name]))
 
     # Get Tag Version from .bumpversion.cfg
     logging.debug('RA create_git_tag_on_master: Opening file .bumpversion.cfg to obtain current version')
@@ -235,7 +238,7 @@ def main():
     git = git_init(git_repo_name, url_dot_git)
     check_diff(git, branch_integration, branch_master, excluded_diff_files)
     merge_2_master(git, branch_integration, branch_master)
-    create_git_tag_on_master(git, branch_master)
+    create_git_tag_on_master(git, branch_master, git_repo_name)
     bumpversion(git, branch_integration, git_repo_name, bump_level)
     push_commits_and_tags(git, branch_integration, branch_master)
 

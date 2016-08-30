@@ -14,7 +14,7 @@ import re
 import os
 
 
-def url_maniupation(url):
+def url_manipulation(url):
     """
     # Manipulate ra_git_repo_url string to drop https and add .git if required
     :param url: Git Repository for getting branches e.g. https://github.com/GeoscienceAustralia/amazonia.git
@@ -93,11 +93,13 @@ def check_diff(git, ra_branch_integration, ra_branch_master, ra_excluded_diff_fi
     # Check Diff
     ra_git_diff = git.diff(''.join([ra_branch_master, '...', ra_branch_integration]), '--name-only')
     ra_split_diff = ra_git_diff.split()
-    logging.debug('RA check_diff: Generating git diff {0}...{1} --name-only'.format(ra_branch_master, ra_branch_integration))
+    logging.debug('RA check_diff: Generating git diff {0}...{1} --name-only'.format(ra_branch_master,
+                                                                                    ra_branch_integration))
 
     if set(ra_split_diff) == set(ra_excluded_diff_files):
         logging.debug('RA check_diff: Git diff results: only excluded files {0}'.format(ra_excluded_diff_files))
-        logging.debug('EXIT: Git diff between {0} and {1} found no changes to action'.format(ra_branch_master, ra_branch_integration))
+        logging.debug('EXIT: Git diff between {0} and {1} found no changes to action'.format(ra_branch_master,
+                                                                                             ra_branch_integration))
     else:
         logging.debug('RA check_diff: Git diff results: Diff Files are {0}'.format(ra_split_diff))
 
@@ -140,7 +142,7 @@ def create_git_tag_on_master(git, ra_branch_master):
                 git.tag('-a',
                         tag,
                         '-m',
-                        'Bump Version -->' + tag)
+                        'Bump Version --> ' + tag)
 
 
 def bumpversion(git, ra_branch_integration, ra_git_repo_name, ra_bump_level):
@@ -216,7 +218,7 @@ def main():
 
     # Variables
     url = args.url
-    git_repo_tuple = url_maniupation(args.url)
+    git_repo_tuple = url_manipulation(args.url)
     url_dot_git = git_repo_tuple[2]
     git_repo_name = git_repo_tuple[1]
     short_git_url = git_repo_tuple[0]
@@ -233,6 +235,7 @@ def main():
     git = git_init(git_repo_name, url_dot_git)
     check_diff(git, branch_integration, branch_master, excluded_diff_files)
     merge_2_master(git, branch_integration, branch_master)
+    create_git_tag_on_master(git, branch_master)
     bumpversion(git, branch_integration, git_repo_name, bump_level)
     push_commits_and_tags(git, branch_integration, branch_master)
 

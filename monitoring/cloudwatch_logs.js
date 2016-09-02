@@ -1,3 +1,6 @@
+/* Script based on Amazon cloudwatch_logs.js and adapted by Jirotech
+ */ 
+
 // v1.1.2
 var https = require('https');
 var zlib = require('zlib');

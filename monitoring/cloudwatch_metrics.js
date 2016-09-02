@@ -1,3 +1,7 @@
+/* Script based on Amazon cloudwatch_logs.js and adapted by Jirotech
+ * for exporting metrics from Cloudwatch to Amazon ES
+*/
+
 // v1.1.2
 var https = require('https');
 //var zlib = require('zlib');
@@ -230,15 +234,6 @@ function hash(str, encoding) {
     return crypto.createHash('sha256').update(str, 'utf8').digest(encoding);
 }
 
-/* Inserted by LISAsoft.
-
-This is an example of how we can get Cloudwatch metrics into the ES data attached
-to each log entry.
-
-It has a bit of overhead (up to 10x in tests) - so needs to be tested and monitored.
-
-The stats are also averaged over 5 mins.
-*/
 
 function getCloudWatchMetric(metric, aggtime, stattype, instance, callback) {
    var namespace = 'AWS/EC2'

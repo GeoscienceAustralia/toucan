@@ -6,55 +6,91 @@ import requests
 import zipfile
 import re
 
-def create_elasticsearch_domain(name, access_policy, boto_session):
+def create_elasticsearch_domain(name, account_id, boto_session, lambda_role, cidr):
     """
     Create Elastic Search Domain
 
     """
 
     boto_elasticsearch = boto_session.client('es')
+    total_time = 0
 
-    boto_elasticsearch.create_elasticsearch_domain(
-        DomainName=name,
-        ElasticsearchVersion='2.3',
-        ElasticsearchClusterConfig={
-            'InstanceType': 't2.micro.elasticsearch',
-            'InstanceCount': 1,
-            'DedicatedMasterEnabled': False,
-            'ZoneAwarenessEnabled': False
-        },
-        EBSOptions={
-            'EBSEnabled': True,
-            'VolumeType': 'gp2',
-            'VolumeSize': 20
-        },
-        AccessPolicies=json.dumps(access_policy)
-    )
+    access_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "AWS": lambda_role
+                },
+                "Action": "es:*",
+                "Resource": "arn:aws:es:ap-southeast-2:{0}:domain/{1}/*".format(account_id, name)
+            },
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "AWS": "*"
+                },
+                "Action": "es:*",
+                "Resource": "arn:aws:es:ap-southeast-2:{0}:domain/{1}/*".format(account_id, name),
+                "Condition": {
+                    "IpAddress": {
+                        "aws:SourceIp": "{0}".format(cidr)
+                    }
+                }
+            }
+        ]
+    }
 
     endpoint = None
 
     while True:
-        es_status = boto_elasticsearch.describe_elasticsearch_domain(DomainName=name)
-        processing = es_status['DomainStatus']['Processing']
+        try:
+            boto_elasticsearch.create_elasticsearch_domain(
+                DomainName=name,
+                ElasticsearchVersion='2.3',
+                ElasticsearchClusterConfig={
+                    'InstanceType': 't2.micro.elasticsearch',
+                    'InstanceCount': 1,
+                    'DedicatedMasterEnabled': False,
+                    'ZoneAwarenessEnabled': False
+                },
+                EBSOptions={
+                    'EBSEnabled': True,
+                    'VolumeType': 'gp2',
+                    'VolumeSize': 20
+                },
+                AccessPolicies=json.dumps(access_policy)
+            )
 
-        if not processing:
-            try:
+            es_status = boto_elasticsearch.describe_elasticsearch_domain(DomainName=name)
+            processing = es_status['DomainStatus']['Processing']
+
+            if not processing:
                 endpoint = es_status['DomainStatus']['Endpoint']
                 print('Domain: {0} has been created!'.format(name))
                 break
-            except Exception:
-                continue
+            else:
+                print('Domain: {0} is still processing. Waiting for 120 seconds before checking again'.format(name))
 
-        print('Domain: {0} is still processing. Waiting for 120 seconds before checking again'.format(name))
-        time.sleep(120)
+        except Exception:
+            print('Domain: {0} is still processing. Waiting for 120 seconds before checking again'.format(name))
+            total_time += 120
+            if total_time > 1800:
+                print('Script has been running for over 30 minutes... This likely means that your elastic search domain'
+                      ' has not created successfully. Please check the Elasticsearch Service dashboard in AWS console'
+                      ' and delete the domain named {0} if it exists before trying again'.format(name))
+                exit(1)
+            time.sleep(120)
+
 
     return endpoint
 
 
-def configure_kibana(endpoint):
+def configure_kibana(endpoint, lambda_arn, boto_session):
     """
     Configures kibana
-
+    and Invokes the lambda function for the first time
     """
 
     cw_template_json = {
@@ -96,6 +132,11 @@ def configure_kibana(endpoint):
 
     print('Creating an index-pattern called cw-* to capture incoming cloudwatch metrics')
     requests.put('https://{0}/.kibana-4/index-pattern/cw-*'.format(endpoint), data=json.dumps(index_pattern_json))
+
+    print('Executing Lambda Function for the first time and waiting 60 seconds for execution to complete')
+    boto_lambda = boto_session.client('lambda')
+    boto_lambda.invoke(FunctionName=lambda_arn)
+    time.sleep(60)
 
     # The below doesn't appear to work for some reason.
     print('Designating cw-* as the default index pattern')
@@ -155,7 +196,7 @@ def create_lambda_function(name, boto_session, role_arn):
     """
 
     # Wait for the IAM Role to be ready to attach
-    time.sleep(30)
+    time.sleep(60)
 
     zip = zipfile.ZipFile('{0}_processing_lambda.zip'.format(name), 'w')
     zip.write('./cloudwatch_metrics.js')
@@ -174,7 +215,7 @@ def create_lambda_function(name, boto_session, role_arn):
                 'ZipFile': zfile.read()
             },
             Description='A Lambda function to process cloudwatch metrics and send to elasticsearch domain {0}'.format(name),
-            Timeout=15,
+            Timeout=15
         )
 
     return response['FunctionArn']
@@ -391,38 +432,19 @@ def main():
     sts = session.client('sts')
     account_id = sts.get_caller_identity()['Account']
 
-    access = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {
-                    "AWS": "*"
-                },
-                "Action": "es:*",
-                "Resource": "arn:aws:es:ap-southeast-2:{0}:domain/{1}/*".format(account_id, domainname),
-                "Condition": {
-                    "IpAddress": {
-                        "aws:SourceIp": "{0}".format(cidr)
-                    }
-                }
-            }
-        ]
-    }
-
     if action in ['CREATE']:
-        endpoint = create_elasticsearch_domain(domainname, access, session)
-        region = endpoint.split('.')[1]
         role_arn = create_lambda_iam_role(domainname, session)
+        endpoint = create_elasticsearch_domain(domainname, account_id, session, role_arn, cidr)
+        region = endpoint.split('.')[1]
         lambda_arn = create_lambda_function(domainname, session, role_arn)
         create_cloudwatch_rule(domainname, lambda_arn, endpoint, region, session)
         update_lambda_permissions(lambda_arn, session)
-        configure_kibana(endpoint)
+        configure_kibana(endpoint, lambda_arn, session)
+        print("Kibana Endpoint: 'https://{0}/_plugin/kibana/'".format(endpoint))
     elif action in ['DELETE']:
         delete_elk(domainname, session)
     else:
         print('Unrecognised action specified, please set either CREATE or DELETE')
-
 
 
 if __name__ == '__main__':

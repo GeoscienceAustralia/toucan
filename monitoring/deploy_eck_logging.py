@@ -44,25 +44,30 @@ def create_elasticsearch_domain(name, account_id, boto_session, lambda_role, cid
 
     endpoint = None
 
+    try:
+        boto_elasticsearch.create_elasticsearch_domain(
+            DomainName=name,
+            ElasticsearchVersion='2.3',
+            ElasticsearchClusterConfig={
+                'InstanceType': 't2.micro.elasticsearch',
+                'InstanceCount': 1,
+                'DedicatedMasterEnabled': False,
+                'ZoneAwarenessEnabled': False
+            },
+            EBSOptions={
+                'EBSEnabled': True,
+                'VolumeType': 'gp2',
+                'VolumeSize': 20
+            },
+            AccessPolicies=json.dumps(access_policy)
+        )
+    except Exception:
+        print('Could not create elasticsearch domain: {0}.'.format(name))
+        print('Double check that it doesn\'t already exist')
+        exit(1)
+
     while True:
         try:
-            boto_elasticsearch.create_elasticsearch_domain(
-                DomainName=name,
-                ElasticsearchVersion='2.3',
-                ElasticsearchClusterConfig={
-                    'InstanceType': 't2.micro.elasticsearch',
-                    'InstanceCount': 1,
-                    'DedicatedMasterEnabled': False,
-                    'ZoneAwarenessEnabled': False
-                },
-                EBSOptions={
-                    'EBSEnabled': True,
-                    'VolumeType': 'gp2',
-                    'VolumeSize': 20
-                },
-                AccessPolicies=json.dumps(access_policy)
-            )
-
             es_status = boto_elasticsearch.describe_elasticsearch_domain(DomainName=name)
             processing = es_status['DomainStatus']['Processing']
 
@@ -82,7 +87,6 @@ def create_elasticsearch_domain(name, account_id, boto_session, lambda_role, cid
                       ' and delete the domain named {0} if it exists before trying again'.format(name))
                 exit(1)
             time.sleep(120)
-
 
     return endpoint
 
@@ -364,7 +368,6 @@ def delete_elk(name, boto_session):
     except Exception as e:
         print(e)
 
-
     print('Deleting iam objects: {0} and {1}'.format(role_name, policy_name))
 
     try:
@@ -413,7 +416,6 @@ def main():
                         help='The action to perform. options: create OR delete. delete will delete all elk objects with'
                              ' the provided name (-n) default: create')
     parser.add_argument('-c', '--cidr',
-                        required=True,
                         help='A cidr block to limit access to this elk to')
 
     args = parser.parse_args()
@@ -423,9 +425,6 @@ def main():
     domainname = args.name
     action = args.action.upper()
     regex_pattern = '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$'
-    if not re.match(regex_pattern, cidr):
-        print('The provided CIDR: \'{0}\' does not match a cidr pattern. eg. 1-255.0-255.0-255.0-255/0-32'.format(cidr))
-        exit(1)
 
     session = boto3.Session(profile_name=profile)
 
@@ -433,6 +432,9 @@ def main():
     account_id = sts.get_caller_identity()['Account']
 
     if action in ['CREATE']:
+        if not re.match(regex_pattern, cidr):
+            print('The provided CIDR: \'{0}\' does not match a cidr pattern. eg. 1-255.0-255.0-255.0-255/0-32'.format(cidr))
+            exit(1)
         role_arn = create_lambda_iam_role(domainname, session)
         endpoint = create_elasticsearch_domain(domainname, account_id, session, role_arn, cidr)
         region = endpoint.split('.')[1]

@@ -6,6 +6,7 @@ import requests
 import zipfile
 import re
 
+
 def create_elasticsearch_domain(name, account_id, boto_session, lambda_role, cidr):
     """
     Create Elastic Search Domain
@@ -15,13 +16,15 @@ def create_elasticsearch_domain(name, account_id, boto_session, lambda_role, cid
     boto_elasticsearch = boto_session.client('es')
     total_time = 0
 
+    resource = "arn:aws:es:ap-southeast-2:{0}:domain/{1}/*".format(account_id, name)
+
     access_policy = {
         "Version": "2012-10-17",
         "Statement": [
             {
                 "Effect": "Allow",
                 "Principal": {
-                    "AWS": lambda_role
+                    "AWS": str(lambda_role)
                 },
                 "Action": "es:*",
                 "Resource": "arn:aws:es:ap-southeast-2:{0}:domain/{1}/*".format(account_id, name)
@@ -44,6 +47,8 @@ def create_elasticsearch_domain(name, account_id, boto_session, lambda_role, cid
 
     endpoint = None
 
+    time.sleep(5)
+
     try:
         boto_elasticsearch.create_elasticsearch_domain(
             DomainName=name,
@@ -61,9 +66,9 @@ def create_elasticsearch_domain(name, account_id, boto_session, lambda_role, cid
             },
             AccessPolicies=json.dumps(access_policy)
         )
-    except Exception:
+    except Exception as e:
         print('Could not create elasticsearch domain: {0}.'.format(name))
-        print('Double check that it doesn\'t already exist')
+        print('Error was: {0}'.format(e))
         exit(1)
 
     while True:
@@ -77,6 +82,7 @@ def create_elasticsearch_domain(name, account_id, boto_session, lambda_role, cid
                 break
             else:
                 print('Domain: {0} is still processing. Waiting for 120 seconds before checking again'.format(name))
+                time.sleep(120)
 
         except Exception:
             print('Domain: {0} is still processing. Waiting for 120 seconds before checking again'.format(name))
@@ -262,6 +268,15 @@ def create_lambda_iam_role(name, boto_session):
                     "logs:PutLogEvents"
                 ],
                 "Resource": "arn:aws:logs:*:*:*"
+            },
+            {
+                "Effect": "Allow",
+                "Action": [
+                    "es:*"
+                ],
+                "Resource": [
+                    "*"
+                ]
             }
         ]
     }

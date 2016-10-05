@@ -5,6 +5,8 @@ import time
 import requests
 import zipfile
 import re
+import os
+import datetime
 
 
 def create_elasticsearch_domain(name, account_id, boto_session, lambda_role, cidr):
@@ -334,6 +336,48 @@ def update_lambda_permissions(lambda_arn, boto_session):
     )
 
 
+def run_curator(name, boto_session):
+    """
+    Cleans out any indexes older than 30 days.
+
+    """
+
+    boto_elasticsearch = boto_session.client('es')
+
+    es_status = None
+
+    try:
+        es_status = boto_elasticsearch.describe_elasticsearch_domain(DomainName=name)
+    except Exception as e:
+        print('elastic search domain "{0}" does not appear to exist'.format(name))
+        exit(1)
+
+    endpoint = es_status['DomainStatus']['Endpoint']
+
+    table_of_data = requests.get('https://{0}/_cat/indices?v'.format(endpoint)).text
+    list_of_indexes = []
+
+    with open('indexfile.txt', 'w') as f:
+        f.writelines(table_of_data)
+
+    with open('indexfile.txt', 'r') as t:
+        for line in t:
+            line_list = line.strip().split()
+            list_of_indexes.append(line_list[2])
+
+    os.remove('indexfile.txt')
+
+    today = datetime.datetime.now()
+    print(today.strftime('%Y-%m-%d'))
+    regex = '(\d{4})[.](\d{1,2})[.](\d{1,2})$'
+    for index in list_of_indexes:
+        if re.search(regex, index):
+            parsed_index_date = '.'.join(re.findall(regex, index)[0][:3])
+            index_date = datetime.datetime.strptime(parsed_index_date, '%Y.%m.%d')
+            delta = today - index_date
+            if delta.days > 30:
+                requests.delete('https://{0}/{1}'.format(endpoint, index))
+
 def delete_elk(name, boto_session):
     """
     Deletes an elk environment with the specified name
@@ -428,8 +472,9 @@ def main():
                         help='What name to give the elk instance. default: elk')
     parser.add_argument('-a', '--action',
                         default='create',
-                        help='The action to perform. options: create OR delete. delete will delete all elk objects with'
-                             ' the provided name (-n) default: create')
+                        help='The action to perform. options: create, delete, or clean. Delete will delete all elk '
+                             'objects with the provided name (-n). Clean will delete indexes older than 30 days from '
+                             'the elastic search domain name (-n) provided. default: create')
     parser.add_argument('-c', '--cidr',
                         help='A cidr block to limit access to this elk to')
 
@@ -457,9 +502,11 @@ def main():
         create_cloudwatch_rule(domainname, lambda_arn, endpoint, region, session)
         update_lambda_permissions(lambda_arn, session)
         configure_kibana(endpoint, lambda_arn, session)
-        print("Kibana Endpoint: 'https://{0}/_plugin/kibana/'".format(endpoint))
+        print('Kibana Endpoint: \'https://{0}/_plugin/kibana/\''.format(endpoint))
     elif action in ['DELETE']:
         delete_elk(domainname, session)
+    elif action in ['CLEAN']:
+        run_curator(domainname, session)
     else:
         print('Unrecognised action specified, please set either CREATE or DELETE')
 

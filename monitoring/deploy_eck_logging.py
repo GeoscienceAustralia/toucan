@@ -1,3 +1,4 @@
+from __future__ import print_function
 import boto3
 import argparse
 import json
@@ -336,13 +337,13 @@ def update_lambda_permissions(lambda_arn, boto_session):
     )
 
 
-def run_curator(name, boto_session):
+def run_curator(name, boto_session=None):
     """
-    Cleans out any indexes older than 30 days.
+    Cleans out any indices older than 30 days.
 
     """
 
-    boto_elasticsearch = boto_session.client('es')
+    boto_elasticsearch = boto_session.client('es') if boto_session else boto3.client('es')
 
     es_status = None
 
@@ -355,7 +356,7 @@ def run_curator(name, boto_session):
     endpoint = es_status['DomainStatus']['Endpoint']
 
     table_of_data = requests.get('https://{0}/_cat/indices?v'.format(endpoint)).text
-    list_of_indexes = []
+    list_of_indices = []
 
     with open('indexfile.txt', 'w') as f:
         f.writelines(table_of_data)
@@ -363,20 +364,71 @@ def run_curator(name, boto_session):
     with open('indexfile.txt', 'r') as t:
         for line in t:
             line_list = line.strip().split()
-            list_of_indexes.append(line_list[2])
+            list_of_indices.append(line_list[2])
 
     os.remove('indexfile.txt')
 
     today = datetime.datetime.now()
     print(today.strftime('%Y-%m-%d'))
     regex = '(\d{4})[.](\d{1,2})[.](\d{1,2})$'
-    for index in list_of_indexes:
+    for index in list_of_indices:
         if re.search(regex, index):
             parsed_index_date = '.'.join(re.findall(regex, index)[0][:3])
             index_date = datetime.datetime.strptime(parsed_index_date, '%Y.%m.%d')
             delta = today - index_date
             if delta.days > 30:
                 requests.delete('https://{0}/{1}'.format(endpoint, index))
+
+def create_curator_lambda(domainname, role_arn):
+    """
+    Uploads this script into lambda and sets up a scheduled cloud watch rule to clean up elastic search indices that are
+    older than 30 days once a day.
+    """
+
+    zip = zipfile.ZipFile('{0}_curator.zip'.format(domainname), 'w')
+    zip.write('./deploy_eck_logging.py')
+    zip.close()
+
+    boto_lambda = boto3.client('lambda')
+
+    print('Creating a lambda function: \'{0}_curator\' using the local file \'deploy_eck_logging.py\''.format(domainname))
+    with open('{0}_curator.zip'.format(domainname), 'rb') as zfile:
+        response = boto_lambda.create_function(
+            FunctionName='{0}_curator'.format(domainname),
+            Runtime='python2.7',
+            Role=role_arn,
+            Handler='deploy_eck_logging.handler',
+            Code={
+                'ZipFile': zfile.read()
+            },
+            Description='A Lambda function to clean up old elasticsearch indices on domain: {0}'.format(domainname),
+            Timeout=15
+        )
+
+    lambda_arn = response['FunctionArn']
+
+    boto_cloudwatch = boto3.client('events')
+
+    print('Creating a Cloudwatch rule \'es_{0}_curator\''.format(domainname))
+    rule = boto_cloudwatch.put_rule(
+        Name='cloudwatch_to_{0}_es'.format(domainname),
+        ScheduleExpression='rate(1 days)',
+        State='ENABLED',
+        Description='clean up {0} elasticsearch indices older than 30 days'.format(domainname)
+    )
+
+    print('Creating a target for the Cloudwatch rule, pointing it at the lambda function')
+    target = boto_cloudwatch.put_targets(
+        Rule='cloudwatch_to_{0}_es'.format(domainname),
+        Targets=[
+            {
+                'Id': '0',
+                'Arn': lambda_arn,
+                'Input': json.dumps({"domainname": domainname}),
+            }
+        ]
+    )
+
 
 def delete_elk(name, boto_session):
     """
@@ -456,11 +508,10 @@ def delete_elk(name, boto_session):
 
     print('All Eck objects for: \'{0}\' have been deleted'.format(name))
 
-
-def main():
+def parse_args():
     """
-    Create Elastic Search Domain
-
+    Parses the command line arguments for use throughout the script
+    :return:
     """
 
     parser = argparse.ArgumentParser()
@@ -473,12 +524,21 @@ def main():
     parser.add_argument('-a', '--action',
                         default='create',
                         help='The action to perform. options: create, delete, or clean. Delete will delete all elk '
-                             'objects with the provided name (-n). Clean will delete indexes older than 30 days from '
+                             'objects with the provided name (-n). Clean will delete indices older than 30 days from '
                              'the elastic search domain name (-n) provided. default: create')
     parser.add_argument('-c', '--cidr',
                         help='A cidr block to limit access to this elk to')
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+    """
+    Create Elastic Search Domain
+
+    """
+
+    args = parse_args()
 
     profile = args.profile
     cidr = args.cidr
@@ -503,6 +563,7 @@ def main():
         update_lambda_permissions(lambda_arn, session)
         configure_kibana(endpoint, lambda_arn, session)
         print('Kibana Endpoint: \'https://{0}/_plugin/kibana/\''.format(endpoint))
+        create_curator_lambda(domainname, role_arn)
     elif action in ['DELETE']:
         delete_elk(domainname, session)
     elif action in ['CLEAN']:
@@ -510,6 +571,11 @@ def main():
     else:
         print('Unrecognised action specified, please set either CREATE or DELETE')
 
+def lambda_handler(event, context):
+    """
+
+    """
+    run_curator(event['domainname'])
 
 if __name__ == '__main__':
     main()

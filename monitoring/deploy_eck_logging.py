@@ -504,7 +504,11 @@ def main():
         configure_kibana(endpoint, lambda_arn, session)
         print('Kibana Endpoint: \'https://{0}/_plugin/kibana/\''.format(endpoint))
     elif action in ['DELETE']:
-        delete_elk(domainname, session)
+        user_input = input('Are you sure you want to delete the ELK stack with name {0}? '.format(domainname))
+        if user_input in ['yes','y','Yes']:
+          delete_elk(domainname, session)
+        else:
+          print('No action performed. Exiting.')
     elif action in ['CLEAN']:
         run_curator(domainname, session)
     else:

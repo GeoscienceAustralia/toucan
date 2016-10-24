@@ -505,7 +505,7 @@ def main():
         print('Kibana Endpoint: \'https://{0}/_plugin/kibana/\''.format(endpoint))
     elif action in ['DELETE']:
         user_input = input('Are you sure you want to delete the ELK stack with name {0}? '.format(domainname))
-        if user_input in ['yes','y','Yes']:
+        if user_input.upper() in ['YES','Y']:
           delete_elk(domainname, session)
         else:
           print('No action performed. Exiting.')

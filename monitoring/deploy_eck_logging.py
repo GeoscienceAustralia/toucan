@@ -579,7 +579,11 @@ def main():
         delete_zip_files(domainname)
         print('elk {0} has been fully created'.format(domainname))
     elif action in ['DELETE']:
-        delete_elk(domainname, session)
+        user_input = input('Are you sure you want to delete the ELK stack with name {0}? '.format(domainname))
+        if user_input.upper() in ['YES', 'Y']:
+            delete_elk(domainname, session)
+        else:
+            print('No action performed. Exiting.')
     else:
         print('Unrecognised action specified, please set either CREATE or DELETE')
 

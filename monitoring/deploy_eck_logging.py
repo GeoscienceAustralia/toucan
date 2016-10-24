@@ -1,4 +1,3 @@
-from __future__ import print_function
 import boto3
 import argparse
 import json
@@ -347,8 +346,8 @@ def update_lambda_permissions(lambda_arn, boto_session):
 
 def create_curator_lambda(domainname, role_arn):
     """
-    Uploads this script into lambda and sets up a scheduled cloud watch rule to clean up elastic search indices that are
-    older than 30 days once a day.
+    Uploads the ./eck_curator.py script into lambda and sets up a scheduled cloud watch rule to clean up elastic search
+    indices that are older than 30 days once a day.
     """
 
     zip = zipfile.ZipFile('{0}_curator.zip'.format(domainname), 'w')
@@ -535,8 +534,6 @@ def parse_args():
                         default='create',
                         help='The action to perform. options: create, or delete. Delete will delete all elk '
                              'objects with the provided name (-n). default: create')
-    parser.add_argument('-c', '--cidr',
-                        help='A cidr block to limit access to this elk to')
 
     return parser.parse_args()
 
@@ -550,7 +547,6 @@ def main():
     args = parse_args()
 
     profile = args.profile
-    cidr = args.cidr
     domainname = args.name
     action = args.action.upper()
     regex_pattern = '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$'
@@ -561,9 +557,15 @@ def main():
     account_id = sts.get_caller_identity()['Account']
 
     if action in ['CREATE']:
+        cidr = input('Please provide a CIDR block to restrict access to elasticsearch domain: {0}\n'.format(domainname))
         if not re.match(regex_pattern, cidr):
-            print('The provided CIDR: \'{0}\' does not match a cidr pattern. eg. 1-255.0-255.0-255.0-255/0-32'.format(cidr))
-            exit(1)
+            while True:
+                print('The provided CIDR: \'{0}\' does not match a cidr pattern. eg. 0-255.0-255.0-255.0-255/0-32'.format(cidr))
+                cidr = input('Please provide a working CIDR block\n')
+                if re.match(regex_pattern, cidr):
+                    break
+                else:
+                    continue
         role_arn = create_lambda_iam_role(domainname, session)
         endpoint = create_elasticsearch_domain(domainname, account_id, session, role_arn, cidr)
         region = endpoint.split('.')[1]

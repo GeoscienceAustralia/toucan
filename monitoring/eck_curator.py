@@ -26,7 +26,7 @@ def run_curator(name):
 
     endpoint = es_status['DomainStatus']['Endpoint']
 
-    table_of_data = get_table_of_data(endpoint)
+    table_of_data = make_request('{0}/_cat/indices?v'.format(endpoint))
 
     list_of_indices = []
     deleted_indices = []
@@ -49,71 +49,33 @@ def run_curator(name):
             delta = today - index_date
             if delta.days > 30:
                 deleted_indices.append(index)
-                delete_index(endpoint, index)
+                make_request('{0}/{1}'.format(endpoint, index), 'DELETE')
 
     if deleted_indices:
         print('Found and deleted the following old indices: {0}'.format(', '.join(deleted_indices)))
 
 
-def get_table_of_data(endpoint):
+def make_request(endpoint, method='GET'):
     """
-    This function makes a GET request for the indices that are currently in a given elasticsearch domain
+    This function handles a HTTP request to a given elasticsearch domain endpoint and method.
     :param endpoint: The elasticsearch domain endpoint
+    :param method: the type of HTTP method to use. eg: 'GET POST DELETE etc'
+    :return: The response of the request
     """
 
     region = endpoint.split('.')[1]
     service = endpoint.split('.')[2]
-    request_parameters = 'v'
-    method = 'GET'
-    path = '/_cat/indices'
-
     credentials = boto3.session.Session().get_credentials()
-
-    url = 'https://{0}{1}?{2}'.format(endpoint, path, request_parameters)
-
-    request = AWSRequest(method=method, url=url)
+    request = AWSRequest(method=method, url='https://{0}'.format(endpoint))
     SigV4Auth(credentials, service, region).add_auth(request)
-
     headers = dict(request.headers.items())
-
     opener = urllib2.build_opener(urllib2.HTTPHandler)
-    request = urllib2.Request(url)
+    request = urllib2.Request('https://{0}'.format(endpoint))
+
     request.add_header('X-Amz-Date', headers['X-Amz-Date'])
     request.add_header('X-Amz-Security-Token', headers['X-Amz-Security-Token'])
     request.add_header('Authorization', headers['Authorization'])
     request.get_method = lambda: method
-
-    return opener.open(request).read()
-
-
-def delete_index(endpoint, index):
-    """
-    This function makes a DELETE request to remove an old index from a given elasticsearch domain
-    :param endpoint: The elasticsearch domain endpoint
-    :param index: The name of the index to delete.
-    """
-
-    region = endpoint.split('.')[1]
-    service = endpoint.split('.')[2]
-    method = 'DELETE'
-    path = index
-
-    credentials = boto3.session.Session().get_credentials()
-
-    url = 'https://{0}{1}'.format(endpoint, path)
-
-    request = AWSRequest(method=method, url=url)
-    SigV4Auth(credentials, service, region).add_auth(request)
-
-    headers = dict(request.headers.items())
-
-    opener = urllib2.build_opener(urllib2.HTTPHandler)
-    request = urllib2.Request('https://{0}/{1}'.format(endpoint, index))
-    request.add_header('X-Amz-Date', headers['X-Amz-Date'])
-    request.add_header('X-Amz-Security-Token', headers['X-Amz-Security-Token'])
-    request.add_header('Authorization', headers['Authorization'])
-    request.get_method = lambda: 'DELETE'
-    opener.open(request)
 
     return opener.open(request).read()
 

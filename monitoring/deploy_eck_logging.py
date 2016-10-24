@@ -402,6 +402,8 @@ def delete_zip_files(name):
     Keeps the directory clean by deleting the zip files this script creates
     """
 
+    print('Removing zip files that have been created during execution')
+
     try:
         os.remove('{0}_processing_lambda.zip'.format(name))
     except Exception as e:
@@ -410,7 +412,7 @@ def delete_zip_files(name):
     try:
         os.remove('{0}_curator.zip'.format(name))
     except Exception as e:
-        peint(e)
+        print(e)
 
 def delete_elk(name, boto_session):
     """

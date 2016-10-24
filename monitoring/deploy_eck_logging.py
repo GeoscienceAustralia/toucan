@@ -6,7 +6,6 @@ import requests
 import zipfile
 import re
 import os
-import datetime
 
 
 def create_elasticsearch_domain(name, account_id, boto_session, lambda_role, cidr):
@@ -52,6 +51,7 @@ def create_elasticsearch_domain(name, account_id, boto_session, lambda_role, cid
     time.sleep(5)
 
     try:
+        print('Creating elasticsearch domain: {0}'.format(name))
         boto_elasticsearch.create_elasticsearch_domain(
             DomainName=name,
             ElasticsearchVersion='2.3',
@@ -65,9 +65,16 @@ def create_elasticsearch_domain(name, account_id, boto_session, lambda_role, cid
                 'EBSEnabled': True,
                 'VolumeType': 'gp2',
                 'VolumeSize': 20
-            },
+            }
+        )
+        time.sleep(10)
+
+        print('Applying access policies to elasticsearch domain: {0}'.format(name))
+        boto_elasticsearch.update_elasticsearch_domain_config(
+            DomainName=name,
             AccessPolicies=json.dumps(access_policy)
         )
+
     except Exception as e:
         print('Could not create elasticsearch domain: {0}.'.format(name))
         print('Error was: {0}'.format(e))
@@ -135,6 +142,7 @@ def configure_kibana(endpoint, lambda_arn, boto_session):
     default_index_json = {
         "defaultIndex": "cw-*"
     }
+
 
     print('Deleting any non-formated events that have arrived')
     requests.delete('https://{0}/cw*'.format(endpoint))
@@ -325,7 +333,7 @@ def update_lambda_permissions(lambda_arn, boto_session):
 
     """
 
-    boto_lambda = boto_session.client('lambda')
+    boto_lambda = boto_session.client('lambda') if boto_session else boto3.client('lambda')
 
     print('Updating lambda permissions to allow events.amazonaws.com to invoke the function')
     boto_lambda.add_permission(
@@ -336,47 +344,74 @@ def update_lambda_permissions(lambda_arn, boto_session):
     )
 
 
-def run_curator(name, boto_session):
+def create_curator_lambda(domainname, role_arn):
     """
-    Cleans out any indexes older than 30 days.
-
+    Uploads the ./eck_curator.py script into lambda and sets up a scheduled cloud watch rule to clean up elastic search
+    indices that are older than 30 days once a day.
     """
 
-    boto_elasticsearch = boto_session.client('es')
+    zip = zipfile.ZipFile('{0}_curator.zip'.format(domainname), 'w')
+    zip.write('./eck_curator.py')
+    zip.close()
 
-    es_status = None
+    boto_lambda = boto3.client('lambda')
+
+    print('Creating a lambda function: \'{0}_curator\' using the local file \'eck_curator.py\''.format(domainname))
+    with open('{0}_curator.zip'.format(domainname), 'rb') as zfile:
+        response = boto_lambda.create_function(
+            FunctionName='{0}_curator'.format(domainname),
+            Runtime='python2.7',
+            Role=role_arn,
+            Handler='eck_curator.lambda_handler',
+            Code={
+                'ZipFile': zfile.read()
+            },
+            Description='A Lambda function to clean up old elasticsearch indices on domain: {0}'.format(domainname),
+            Timeout=15
+        )
+
+    lambda_arn = response['FunctionArn']
+
+    boto_cloudwatch = boto3.client('events')
+
+    print('Creating a Cloudwatch rule \'es_{0}_curator\''.format(domainname))
+    boto_cloudwatch.put_rule(
+        Name='es_{0}_curator'.format(domainname),
+        ScheduleExpression='rate(1 day)',
+        State='ENABLED',
+        Description='clean up {0} elasticsearch indices older than 30 days'.format(domainname)
+    )
+
+    print('Creating a target for the Cloudwatch rule, pointing it at the lambda function')
+    boto_cloudwatch.put_targets(
+        Rule='es_{0}_curator'.format(domainname),
+        Targets=[
+            {
+                'Id': '0',
+                'Arn': lambda_arn,
+                'Input': json.dumps({"domainname": domainname}),
+            }
+        ]
+    )
+
+    return lambda_arn
+
+def delete_zip_files(name):
+    """
+    Keeps the directory clean by deleting the zip files this script creates
+    """
+
+    print('Removing zip files that have been created during execution')
 
     try:
-        es_status = boto_elasticsearch.describe_elasticsearch_domain(DomainName=name)
+        os.remove('{0}_processing_lambda.zip'.format(name))
     except Exception as e:
-        print('elastic search domain "{0}" does not appear to exist'.format(name))
-        exit(1)
+        print(e)
 
-    endpoint = es_status['DomainStatus']['Endpoint']
-
-    table_of_data = requests.get('https://{0}/_cat/indices?v'.format(endpoint)).text
-    list_of_indexes = []
-
-    with open('indexfile.txt', 'w') as f:
-        f.writelines(table_of_data)
-
-    with open('indexfile.txt', 'r') as t:
-        for line in t:
-            line_list = line.strip().split()
-            list_of_indexes.append(line_list[2])
-
-    os.remove('indexfile.txt')
-
-    today = datetime.datetime.now()
-    print(today.strftime('%Y-%m-%d'))
-    regex = '(\d{4})[.](\d{1,2})[.](\d{1,2})$'
-    for index in list_of_indexes:
-        if re.search(regex, index):
-            parsed_index_date = '.'.join(re.findall(regex, index)[0][:3])
-            index_date = datetime.datetime.strptime(parsed_index_date, '%Y.%m.%d')
-            delta = today - index_date
-            if delta.days > 30:
-                requests.delete('https://{0}/{1}'.format(endpoint, index))
+    try:
+        os.remove('{0}_curator.zip'.format(name))
+    except Exception as e:
+        print(e)
 
 def delete_elk(name, boto_session):
     """
@@ -399,8 +434,34 @@ def delete_elk(name, boto_session):
         else:
             print('Cloudwatch rule {0} did not exist, going ahead with other deletions'.format(cw_rule_name))
 
-    # Delete Lambda object
+    cw_rule_name = 'es_{0}_curator'.format(name)
+    print('Deleting Cloudwatch rule: {0}'.format(cw_rule_name))
+    try:
+        boto_cloudwatch = boto_session.client('events')
+
+        boto_cloudwatch.remove_targets(Rule=cw_rule_name,
+                                       Ids=['0'])
+        boto_cloudwatch.delete_rule(Name=cw_rule_name)
+    except Exception as e:
+        if 'ResourceNotFoundException' not in str(e):
+            print(e)
+        else:
+            print('Cloudwatch rule {0} did not exist, going ahead with other deletions'.format(cw_rule_name))
+
+    # Delete Lambda objects
     lambda_name = '{0}_lambda_function'.format(name)
+    print('Deleting Lambda function: {0}'.format(lambda_name))
+    try:
+        boto_lambda = boto_session.client('lambda')
+
+        boto_lambda.delete_function(FunctionName=lambda_name)
+    except Exception as e:
+        if 'ResourceNotFoundException' not in str(e):
+            print(e)
+        else:
+            print('Lambda function {0} did not exist, going ahead with other deletions'.format(lambda_name))
+
+    lambda_name = '{0}_curator'.format(name)
     print('Deleting Lambda function: {0}'.format(lambda_name))
     try:
         boto_lambda = boto_session.client('lambda')
@@ -456,11 +517,10 @@ def delete_elk(name, boto_session):
 
     print('All Eck objects for: \'{0}\' have been deleted'.format(name))
 
-
-def main():
+def parse_args():
     """
-    Create Elastic Search Domain
-
+    Parses the command line arguments for use throughout the script
+    :return:
     """
 
     parser = argparse.ArgumentParser()
@@ -472,16 +532,21 @@ def main():
                         help='What name to give the elk instance. default: elk')
     parser.add_argument('-a', '--action',
                         default='create',
-                        help='The action to perform. options: create, delete, or clean. Delete will delete all elk '
-                             'objects with the provided name (-n). Clean will delete indexes older than 30 days from '
-                             'the elastic search domain name (-n) provided. default: create')
-    parser.add_argument('-c', '--cidr',
-                        help='A cidr block to limit access to this elk to')
+                        help='The action to perform. options: create, or delete. Delete will delete all elk '
+                             'objects with the provided name (-n). default: create')
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+    """
+    Create Elastic Search Domain
+
+    """
+
+    args = parse_args()
 
     profile = args.profile
-    cidr = args.cidr
     domainname = args.name
     action = args.action.upper()
     regex_pattern = '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$'
@@ -492,9 +557,15 @@ def main():
     account_id = sts.get_caller_identity()['Account']
 
     if action in ['CREATE']:
+        cidr = input('Please provide a CIDR block to restrict access to elasticsearch domain: {0}\n'.format(domainname))
         if not re.match(regex_pattern, cidr):
-            print('The provided CIDR: \'{0}\' does not match a cidr pattern. eg. 1-255.0-255.0-255.0-255/0-32'.format(cidr))
-            exit(1)
+            while True:
+                print('The provided CIDR: \'{0}\' does not match a cidr pattern. eg. 0-255.0-255.0-255.0-255/0-32'.format(cidr))
+                cidr = input('Please provide a working CIDR block\n')
+                if re.match(regex_pattern, cidr):
+                    break
+                else:
+                    continue
         role_arn = create_lambda_iam_role(domainname, session)
         endpoint = create_elasticsearch_domain(domainname, account_id, session, role_arn, cidr)
         region = endpoint.split('.')[1]
@@ -503,17 +574,18 @@ def main():
         update_lambda_permissions(lambda_arn, session)
         configure_kibana(endpoint, lambda_arn, session)
         print('Kibana Endpoint: \'https://{0}/_plugin/kibana/\''.format(endpoint))
+        curator_arn = create_curator_lambda(domainname, role_arn)
+        update_lambda_permissions(curator_arn, session)
+        delete_zip_files(domainname)
+        print('elk {0} has been fully created'.format(domainname))
     elif action in ['DELETE']:
         user_input = input('Are you sure you want to delete the ELK stack with name {0}? '.format(domainname))
-        if user_input.upper() in ['YES','Y']:
-          delete_elk(domainname, session)
+        if user_input.upper() in ['YES', 'Y']:
+            delete_elk(domainname, session)
         else:
-          print('No action performed. Exiting.')
-    elif action in ['CLEAN']:
-        run_curator(domainname, session)
+            print('No action performed. Exiting.')
     else:
         print('Unrecognised action specified, please set either CREATE or DELETE')
-
 
 if __name__ == '__main__':
     main()

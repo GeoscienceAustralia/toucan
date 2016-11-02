@@ -134,8 +134,77 @@ def configure_kibana(endpoint, lambda_arn, boto_session):
             }
         }
 
-    index_pattern_json = {
+    cost_template_json = {
+        "template": "cost-*",
+        "mappings": {
+            "_default_": {
+                "properties": {
+                    "AccountId": {
+                        "index": "not_analyzed",
+                        "type": "string"
+                        },
+                    "AccountName": {
+                        "index": "not_analyzed",
+                        "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+
+    deployment_template_json = {
+        "template": "deployment-*",
+        "mappings": {
+            "_default_": {
+                "properties": {
+                    "Application": {
+                        "index": "not_analyzed",
+                        "type": "string"
+                        },
+                    "Environment": {
+                        "index": "not_analyzed",
+                        "type": "string"
+                        },
+                    "deployment": {
+                        "index": "not_analyzed",
+                        "type": "number"
+                        }
+                    }
+                }
+            }
+        }
+
+    repo_template_json = {
+        "template": "repo-*",
+        "mappings": {
+            "_default_": {
+                "properties": {
+                    "Type": {
+                        "index": "not_analyzed",
+                        "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+
+    cw_index_pattern_json = {
         "title": "cw-*",
+        "timeFieldName": "timestamp"
+    }
+
+    cost_index_pattern_json = {
+        "title": "cost-*",
+        "timeFieldName": "timestamp"
+    }
+
+    deployment_index_pattern_json = {
+        "title": "deployment-*",
+        "timeFieldName": "timestamp"
+    }
+
+    repo_index_pattern_json = {
+        "title": "repo-*",
         "timeFieldName": "timestamp"
     }
 
@@ -143,15 +212,40 @@ def configure_kibana(endpoint, lambda_arn, boto_session):
         "defaultIndex": "cw-*"
     }
 
-
     print('Deleting any non-formated events that have arrived')
     requests.delete('https://{0}/cw*'.format(endpoint))
 
     print('Creating a data template to format the data from cloudwatch events')
-    requests.put('https://{0}/_template/cw-*'.format(endpoint), data=json.dumps(cw_template_json))
+    requests.put('https://{0}/_template/cw-*'.format(endpoint),
+                 data=json.dumps(cw_template_json))
+
+    print('Creating a data template to format billing data')
+    requests.put('https://{0}/_template/cost-*'.format(endpoint),
+                 data=json.dumps(cost_template_json))
+
+    print('Creating a data template to format deployment data')
+    requests.put('https://{0}/_template/deployment-*'.format(endpoint),
+                 data=json.dumps(deployment_template_json))
+
+    print('Creating a data template to format repo data')
+    requests.put('https://{0}/_template/repo-*'.format(endpoint),
+                 data=json.dumps(repo_template_json))
 
     print('Creating an index-pattern called cw-* to capture incoming cloudwatch metrics')
-    requests.put('https://{0}/.kibana-4/index-pattern/cw-*'.format(endpoint), data=json.dumps(index_pattern_json))
+    requests.put('https://{0}/.kibana-4/index-pattern/cw-*'.format(endpoint),
+                 data=json.dumps(cw_index_pattern_json))
+
+    print('Creating an index-pattern called cost-* to capture incoming billing data')
+    requests.put('https://{0}/.kibana-4/index-pattern/cost-*'.format(endpoint),
+                 data=json.dumps(cost_index_pattern_json))
+
+    print('Creating an index-pattern called deployment-* to capture incoming deployment data')
+    requests.put('https://{0}/.kibana-4/index-pattern/deployment-*'.format(endpoint),
+                 data=json.dumps(deployment_index_pattern_json))
+
+    print('Creating an index-pattern called repo-* to capture incoming deployment data')
+    requests.put('https://{0}/.kibana-4/index-pattern/repo-*'.format(endpoint),
+                 data=json.dumps(repo_index_pattern_json))
 
     print('Executing Lambda Function for the first time and waiting 60 seconds for execution to complete')
     boto_lambda = boto_session.client('lambda')
@@ -264,7 +358,8 @@ def create_lambda_iam_role(name, boto_session):
             {
                 "Effect": "Allow",
                 "Action": [
-                    "ec2:DescribeInstances"
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeVolumes"
                 ],
                 "Resource": [
                     "*"

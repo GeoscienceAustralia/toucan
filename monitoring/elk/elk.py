@@ -448,7 +448,6 @@ def main():
         print('Kibana Endpoint: \'https://{0}/_plugin/kibana/\''.format(endpoint))
         print('elk {0} has been fully created'.format(domainname))
     elif action in ['UPDATE']:
-        #
         print('update placeholder hit.... No code to run yet! :)')
     elif action in ['DELETE']:
         user_input = input('Are you sure you want to delete the ELK stack with name {0}? '.format(domainname))

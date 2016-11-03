@@ -14,6 +14,30 @@
                 "account": {
                     "index": "not_analyzed",
                     "type": "string"
+                },
+                "database_id": {
+                    "index": "not_analyzed",
+                    "type": "string"
+                },
+                "volume_id": {
+                    "index": "not_analyzed",
+                    "type": "string"
+                },
+                "FreeStorageSpace": {
+                    "index": "not_analyzed",
+                    "type": "long"
+                },
+                "FreeableMemory": {
+                    "index": "not_analyzed",
+                    "type": "long"
+                },
+                "VolumeWriteBytes": {
+                    "index": "not_analyzed",
+                    "type": "long"
+                },
+                "VolumeReadBytes": {
+                    "index": "not_analyzed",
+                    "type": "long"
                 }
             }
         }

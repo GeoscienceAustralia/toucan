@@ -171,7 +171,7 @@ def create_lambda_functions(esname, endpoint, boto_session, role_arn):
                 file_details = file.split('.')
 
                 zip_file = zipfile.ZipFile('{0}_{1}.zip'.format(esname, file_details[0]), 'w')
-                zip_file.write('./lambdas/{0}/{1}'.format(folder, file))
+                zip_file.write('./lambdas/{0}/{1}'.format(folder, file), './{0}'.format(file))
                 zip_file.close()
 
                 print('Creating a lambda function: \'{0}_{1}\' using the local file \'{2}\''
@@ -254,7 +254,8 @@ def create_lambda_iam_role(name, boto_session):
                 "Effect": "Allow",
                 "Action": [
                     "ec2:DescribeInstances",
-                    "ec2:DescribeVolumes"
+                    "ec2:DescribeVolumes",
+                    "rds:DescribeDBInstances"
                 ],
                 "Resource": [
                     "*"
@@ -447,6 +448,7 @@ def main():
         print('Kibana Endpoint: \'https://{0}/_plugin/kibana/\''.format(endpoint))
         print('elk {0} has been fully created'.format(domainname))
     elif action in ['UPDATE']:
+        #
         print('update placeholder hit.... No code to run yet! :)')
     elif action in ['DELETE']:
         user_input = input('Are you sure you want to delete the ELK stack with name {0}? '.format(domainname))

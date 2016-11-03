@@ -141,7 +141,7 @@ def create_lambda_functions(esname, endpoint, boto_session, role_arn):
     region = endpoint.split('.')[1]
     runtime = handler = description = timeout = event_rule = schedule = None
 
-    time.sleep(60)
+    time.sleep(30)
 
     for folder in os.listdir('./lambdas'):
         try:

@@ -4,6 +4,7 @@ import urllib2
 import datetime
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
+from botocore.endpoint import Endpoint
 
 
 def get_other_metrics(input_dict):
@@ -141,14 +142,16 @@ def make_request(endpoint, data, method='GET'):
     :return: The response of the request
     """
 
+    session = boto3.session.Session()
+    aws_endpoint = Endpoint(host=endpoint, endpoint_prefix='https://', event_emitter=session.events)
     region = endpoint.split('.')[1]
     service = endpoint.split('.')[2]
     credentials = boto3.session.Session().get_credentials()
-    request = AWSRequest(method=method, url='https://{0}'.format(endpoint))
+    request = AWSRequest(method=method, endpoint=aws_endpoint, data=data)
     SigV4Auth(credentials, service, region).add_auth(request)
     headers = dict(request.headers.items())
     opener = urllib2.build_opener(urllib2.HTTPHandler)
-    request = urllib2.Request('https://{0}'.format(endpoint), data)
+    request = urllib2.Request('https://{0}'.format(endpoint), request.data)
 
     request.add_header('X-Amz-Date', headers['X-Amz-Date'])
     request.add_header('X-Amz-Security-Token', headers['X-Amz-Security-Token'])

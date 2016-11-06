@@ -20,11 +20,10 @@ class StackSwitchError(Exception):
         self.value = value
 
 
-def lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, object_type, object_name, session):
+def lookup_resource_id(cf_stack_name, unit_name, object_type, object_name, session):
     """
     Return the AWS identifier for a cloud formation resource
     :param cf_stack_name: Cloudfromation stack name
-    :param logical_stack_name: Amazonia stack name
     :param unit_name: Amazonia unit name
     :param object_type: 'Asg' or 'Elb'
     :param object_name: 'blue' or 'green' for ASGs, 'active' and 'inactive' for ELBs
@@ -33,7 +32,7 @@ def lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, object_type
     """
     cloudformation_client = session.client('cloudformation')
 
-    logical_resource_name = object_name + logical_stack_name + unit_name + object_type
+    logical_resource_name = object_name + unit_name + object_type
 
     response = cloudformation_client.describe_stack_resource(
         StackName=cf_stack_name,
@@ -90,11 +89,10 @@ def check_state(asg_client, blue_asg_id, active_elb_id, inactive_elb_id):
     return state
 
 
-def stack_switch(cf_stack_name, logical_stack_name, unit_name, profile):
+def stack_switch(cf_stack_name, unit_name, profile):
     """
     Switch an Amazonia zd autoscaling unit in a given Amazonia stack
     :param cf_stack_name: Cloudformation stack name
-    :param logical_stack_name: Amazonia stack name
     :param unit_name: Amazonia unit name
     :param profile: AWS profile name to use
     """
@@ -106,10 +104,10 @@ def stack_switch(cf_stack_name, logical_stack_name, unit_name, profile):
 
     asg_client = session.client('autoscaling')
 
-    blue_asg_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Asg', 'blue', session)
-    green_asg_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Asg', 'green', session)
-    active_elb_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Elb', 'prod', session)
-    inactive_elb_id = lookup_resource_id(cf_stack_name, logical_stack_name, unit_name, 'Elb', 'pre', session)
+    blue_asg_id = lookup_resource_id(cf_stack_name, unit_name, 'Asg', 'blue', session)
+    green_asg_id = lookup_resource_id(cf_stack_name, unit_name, 'Asg', 'green', session)
+    active_elb_id = lookup_resource_id(cf_stack_name, unit_name, 'Elb', 'prod', session)
+    inactive_elb_id = lookup_resource_id(cf_stack_name, unit_name, 'Elb', 'pre', session)
 
     state = check_state(asg_client, blue_asg_id, active_elb_id, inactive_elb_id)
     print('Detected {0} in {1} state, switching...'.format(unit_name, state))
@@ -150,10 +148,6 @@ def get_args(argv):
                         help="The name of the cloudformation stack",
                         dest="cf_stack_name",
                         required=True)
-    parser.add_argument("-L", "-l", "--logical_stack_name",
-                        help="The name of amazonia stack",
-                        dest="logical_stack_name",
-                        required=True)
     parser.add_argument("-U", "-u", "--unit_name",
                         help="The name of the unit to switch",
                         dest="unit_name",
@@ -173,8 +167,7 @@ def main(argv):
     :param argv: command line arguments
     """
     args = get_args(argv)
-    stack_switch(cf_stack_name=args.cf_stack_name, logical_stack_name=args.logical_stack_name, unit_name=args.unit_name,
-                 profile=args.profile)
+    stack_switch(cf_stack_name=args.cf_stack_name, unit_name=args.unit_name, profile=args.profile)
 
 
 if __name__ == "__main__":

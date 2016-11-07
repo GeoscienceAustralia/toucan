@@ -255,7 +255,8 @@ def create_lambda_iam_role(name, boto_session):
                 "Action": [
                     "ec2:DescribeInstances",
                     "ec2:DescribeVolumes",
-                    "rds:DescribeDBInstances"
+                    "rds:DescribeDBInstances",
+                    "s3:*"
                 ],
                 "Resource": [
                     "*"

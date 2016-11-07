@@ -16,8 +16,8 @@ exports.handler = function(input, context) {
     s3.listObjects({Bucket: bucket}, function(err, data) {
       if (err) console.log(err, err.stack); // an error occurred
       else {
-          latestobj.push(data.Contents[0])
-          var name = latestobj[0].Key);
+          latestobj.push(data.Contents[0]);
+          var name = latestobj[0].Key;
           var re = new RegExp("/^([\d]+)(-aws-billing-csv-)/");
           for (var i = 1; i < data.Contents.length; i++) {
             if (new Date(latestobj[0].LastModified).getTime() < new Date(data.Contents[i].LastModified).getTime() &&

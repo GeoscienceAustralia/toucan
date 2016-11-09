@@ -244,23 +244,15 @@ def create_lambda_iam_role(name, boto_session):
             {
                 "Effect": "Allow",
                 "Action": [
-                    "cloudwatch:GetMetricStatistics"
-                ],
-                "Resource": [
-                    "*"
-                ]
-            },
-            {
-                "Effect": "Allow",
-                "Action": [
                     "ec2:DescribeInstances",
                     "ec2:DescribeVolumes",
                     "rds:DescribeDBInstances",
+                    "sts:AssumeRole",
+                    "cloudwatch:GetMetricStatistics",
+                    "es:*",
                     "s3:*"
                 ],
-                "Resource": [
-                    "*"
-                ]
+                "Resource": "*"
             },
             {
                 "Effect": "Allow",
@@ -270,15 +262,6 @@ def create_lambda_iam_role(name, boto_session):
                     "logs:PutLogEvents"
                 ],
                 "Resource": "arn:aws:logs:*:*:*"
-            },
-            {
-                "Effect": "Allow",
-                "Action": [
-                    "es:*"
-                ],
-                "Resource": [
-                    "*"
-                ]
             }
         ]
     }

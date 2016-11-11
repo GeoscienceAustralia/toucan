@@ -7,6 +7,7 @@
     "cloudwatch_rule": {
         "endpoint": 0,
         "region": 0,
-        "bucket": "test-aws-billing-to-elk"
+        "bucket": "my-billing-s3-bucket",
+        "role_arn": "arn:aws:iam:1234567890:role/mybillingaccountrole"
     }
 }

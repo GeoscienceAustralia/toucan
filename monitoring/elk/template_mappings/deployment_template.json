@@ -13,7 +13,7 @@
                 },
                 "deployment": {
                     "index": "not_analyzed",
-                    "type": "number"
+                    "type": "long"
                 }
             }
         }

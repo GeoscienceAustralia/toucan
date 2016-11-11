@@ -137,7 +137,7 @@ def make_request(endpoint, data, method='GET'):
     """
     This function handles a HTTP request to a given elasticsearch domain endpoint and method.
     :param endpoint: The elasticsearch domain endpoint
-    :param data:
+    :param data: The data to send along with the request
     :param method: the type of HTTP method to use. eg: 'GET POST DELETE etc'
     :return: The response of the request
     """

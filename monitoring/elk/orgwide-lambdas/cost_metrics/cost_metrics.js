@@ -1,12 +1,10 @@
 var AWS = require('aws-sdk');
-var searchstr = "Total for linked account";
-var latestobj = [];
-
 var https = require('https');
 var crypto = require('crypto');
 
 
 exports.handler = function(input, context) {
+    var latestobj = [];
     var elk_endpoint = new AWS.Endpoint(input.endpoint);
     var bucket = input.bucket;
     AWS.config.region = input.region;
@@ -51,7 +49,6 @@ function find_file_in_s3(s3) {
           for (var i = 0; i < data.Contents.length; i++) {
             var name = data.Contents[i].Key;
             if (re.test(name)) {
-                console.log(name);
                 if (latestobj.length === 0) { latestobj.push(data.Contents[i]); }
                 else {
                 if (new Date(latestobj[0].LastModified).getTime() < new Date(data.Contents[i].LastModified).getTime()){
@@ -65,6 +62,8 @@ function find_file_in_s3(s3) {
 
 
     s3.getObject({Bucket: bucket, Key: latestobj[0].Key}, function(err, data) {
+        var searchstr = "Total for linked account";
+
         if (err) {
             console.log("Error getting object " + err);
             }

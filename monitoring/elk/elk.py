@@ -393,6 +393,9 @@ def parse_args():
                         default='create',
                         help='The action to perform. options: create, or delete. Delete will delete all elk '
                              'objects with the provided name (-n). default: create')
+    parser.add_argument('-r', '--role',
+                        default='NOROLESPECIFIED',
+                        help='ARN of role to be used for lambda functions')
 
     return parser.parse_args()
 
@@ -432,7 +435,14 @@ def main():
         print('Kibana Endpoint: \'https://{0}/_plugin/kibana/\''.format(endpoint))
         print('elk {0} has been fully created'.format(domainname))
     elif action in ['UPDATE']:
-        print('update placeholder hit.... No code to run yet! :)')
+        es = session.client('es')
+        es_status = es.describe_elasticsearch_domain(DomainName=domainname)
+        endpoint = es_status['DomainStatus']['Endpoint']
+
+        if args.role == 'NOROLESPECIFIED':
+            raise RuntimeError("Role ARN -r/--role must be specified to update lambdas")
+
+        create_lambda_functions(domainname, endpoint, session, args.role)
     elif action in ['DELETE']:
         user_input = input('Are you sure you want to delete the ELK stack with name {0}? '.format(domainname))
         if user_input.upper() in ['YES', 'Y']:
